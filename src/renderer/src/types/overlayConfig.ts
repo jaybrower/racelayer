@@ -20,6 +20,10 @@ export interface GaugesConfig {
     speed:      SessionFlags
     delta:      SessionFlags
     fuel:       SessionFlags
+    /** Traction control dial + active indicator — auto-hidden when car has no TC */
+    tc:         SessionFlags
+    /** ABS dial + active indicator — auto-hidden when car has no ABS */
+    abs:        SessionFlags
   }
 }
 
@@ -82,6 +86,8 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
       speed:      { practice: true,  qualifying: true,  race: true  },
       delta:      { practice: true,  qualifying: true,  race: false },
       fuel:       { practice: true,  qualifying: false, race: true  },
+      tc:         { practice: true,  qualifying: true,  race: true  },
+      abs:        { practice: true,  qualifying: true,  race: true  },
     },
   },
   tireTemps: {
@@ -148,6 +154,8 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
         speed:      mergeSF(def.gauges.elements.speed,      storedEl.speed),
         delta:      mergeSF(def.gauges.elements.delta,      storedEl.delta),
         fuel:       mergeSF(def.gauges.elements.fuel,       storedEl.fuel),
+        tc:         mergeSF(def.gauges.elements.tc,         storedEl.tc),
+        abs:        mergeSF(def.gauges.elements.abs,        storedEl.abs),
       },
     },
     tireTemps: {

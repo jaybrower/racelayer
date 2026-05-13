@@ -68,6 +68,11 @@ export interface IRacingTelemetry {
   /** irsdk_CarLeftRight: 0=clear 1=left 2=right 3=both 4=2left 5=2right 6=2both */
   carLeftRight: number
 
+  /** Traction control — level is the dial setting (0 = off), active = currently intervening */
+  tc:  { level: number; active: boolean }
+  /** Anti-lock brakes — level is the dial setting (0 = off), active = currently intervening */
+  abs: { level: number; active: boolean }
+
   cars: CarTelemetry[]
   drivers: DriverInfo[]
   capabilities: CarCapabilities
@@ -98,6 +103,8 @@ export const EMPTY_TELEMETRY: IRacingTelemetry = {
   tireLR: [0, 0, 0],
   tireRR: [0, 0, 0],
   carLeftRight: 0,
+  tc:  { level: 0, active: false },
+  abs: { level: 0, active: false },
   cars: [],
   drivers: [],
   capabilities: { hasSurfaceTireTemps: false, hasTractionControl: false, hasABS: false },

@@ -423,6 +423,18 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
       tireRR: [rf(buf, D, 'RRtempCL'), rf(buf, D, 'RRtempCM'), rf(buf, D, 'RRtempCR')] as const,
     }),
     carLeftRight: ri(buf, D, 'CarLeftRight'),
+    tc: {
+      // dcTractionControl is the driver-adjustable dial (0 = off).
+      // TractionControlActive is true while the system is intervening.
+      level:  rf(buf, D, 'dcTractionControl'),
+      active: rb(buf, D, 'TractionControlActive'),
+    },
+    abs: {
+      // dcABS is the driver-adjustable ABS level (0 = off).
+      // BrakeABSactive fires when ABS is intervening (variable name varies by car).
+      level:  rf(buf, D, 'dcABS'),
+      active: rb(buf, D, 'BrakeABSactive'),
+    },
     cars,
     drivers:      cachedDrivers,
     capabilities: carCapabilities,
@@ -438,6 +450,8 @@ const DISCONNECTED: IRacingTelemetry = {
   lapDeltaToBestLap: NaN, lapDistPct: 0,
   tireLF: [0, 0, 0], tireRF: [0, 0, 0], tireLR: [0, 0, 0], tireRR: [0, 0, 0],
   carLeftRight: 0,
+  tc:  { level: 0, active: false },
+  abs: { level: 0, active: false },
   cars: [], drivers: [],
   capabilities: { hasSurfaceTireTemps: false, hasTractionControl: false, hasABS: false },
 }

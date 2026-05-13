@@ -60,6 +60,11 @@ export interface IRacingTelemetry {
   tireRR: TireCorner
   carLeftRight: number
 
+  /** Traction control — level is the dial setting (0 = off), active = currently intervening */
+  tc:  { level: number; active: boolean }
+  /** Anti-lock brakes — level is the dial setting (0 = off), active = currently intervening */
+  abs: { level: number; active: boolean }
+
   cars: CarTelemetry[]
   drivers: DriverInfo[]
   capabilities: CarCapabilities

@@ -126,6 +126,20 @@ function OverlayConfigSection() {
           disabled={SESSION_TYPES.every(gDisabled)}
           onChange={(st, val) => patch(c => { c.gauges.elements.fuel[st] = val; return c })}
         />
+        <OverlayRow
+          label="Traction Control"
+          flags={config.gauges.elements.tc}
+          indent
+          disabled={SESSION_TYPES.every(gDisabled)}
+          onChange={(st, val) => patch(c => { c.gauges.elements.tc[st] = val; return c })}
+        />
+        <OverlayRow
+          label="ABS"
+          flags={config.gauges.elements.abs}
+          indent
+          disabled={SESSION_TYPES.every(gDisabled)}
+          onChange={(st, val) => patch(c => { c.gauges.elements.abs[st] = val; return c })}
+        />
 
         {/* ── Tire Temps ── */}
         <tr><td colSpan={4} className={styles.cfgSpacer} /></tr>

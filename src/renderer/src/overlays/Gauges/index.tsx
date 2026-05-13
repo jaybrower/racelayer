@@ -94,6 +94,40 @@ function TraceChart({ throttle, brake }: { throttle: number; brake: number }) {
   )
 }
 
+// ── Driver aid indicator ──────────────────────────────────────────────────────
+
+/**
+ * Compact TC / ABS block.
+ *   • Dim when the aid is configured but currently idle.
+ *   • Faded / "OFF" label when the dial is set to 0.
+ *   • Amber border + background when the system is actively intervening.
+ */
+function AidBlock({ label, level, active }: { label: string; level: number; active: boolean }) {
+  const off = level < 0.5
+  return (
+    <div
+      className={styles.aidBlock}
+      style={{
+        borderColor: active ? 'rgba(251,191,36,0.75)' : 'rgba(100,116,139,0.25)',
+        background:  active ? 'rgba(251,191,36,0.10)'  : 'rgba(255,255,255,0.03)',
+        opacity:     off ? 0.35 : 1,
+      }}
+    >
+      <span
+        className={styles.aidLabel}
+        style={{ color: active ? '#fbbf24' : '#64748b' }}
+      >
+        {label}
+      </span>
+      <span className={styles.aidLevel}>{off ? 'OFF' : Math.round(level)}</span>
+      <div
+        className={styles.aidDot}
+        style={{ background: active ? '#fbbf24' : 'rgba(100,116,139,0.25)' }}
+      />
+    </div>
+  )
+}
+
 // ── Main overlay ─────────────────────────────────────────────────────────────
 
 export default function Gauges() {
@@ -108,6 +142,7 @@ export default function Gauges() {
   // Return null when the overlay is disabled for this session (but keep it in edit mode)
   if (!config.gauges.enabled[sType] && !editMode) return null
 
+  const hide = config.global.hideUnsupportedElements
   const show = {
     rpmBar:     el.rpmBar[sType]     ?? true,
     inputTrace: el.inputTrace[sType] ?? false,
@@ -115,6 +150,9 @@ export default function Gauges() {
     speed:      el.speed[sType]      ?? true,
     delta:      el.delta[sType]      ?? false,
     fuel:       el.fuel[sType]       ?? true,
+    // TC/ABS: respect per-session config AND auto-hide if car doesn't support them
+    tc:  (el.tc[sType]  ?? true) && (!hide || t.capabilities.hasTractionControl),
+    abs: (el.abs[sType] ?? true) && (!hide || t.capabilities.hasABS),
   }
 
   const maxRpm   = t.playerCarRedLine > 0 ? t.playerCarRedLine : FALLBACK_REDLINE
@@ -176,6 +214,10 @@ export default function Gauges() {
             <span className={styles.gearValue}>{gearLabel(t.gear)}</span>
           </div>
         )}
+
+        {/* Driver aids — shown next to gear when car supports them */}
+        {show.tc  && <AidBlock label="TC"  level={t.tc.level}  active={t.tc.active}  />}
+        {show.abs && <AidBlock label="ABS" level={t.abs.level} active={t.abs.active} />}
 
         {/* Speed */}
         {show.speed && (

@@ -203,6 +203,14 @@ export function createMockPoller() {
       tireLR: state.tireLR,
       tireRR: state.tireRR,
       carLeftRight,
+      tc: {
+        level:  4,
+        active: state.playerThrottle > 0.88,  // TC fires on aggressive throttle
+      },
+      abs: {
+        level:  2,
+        active: state.playerBrake > 0.45,     // ABS fires under heavy braking
+      },
       cars:     carsRaw,
       drivers:  MOCK_DRIVERS,
       // Dev mode simulates a car with full capability support
