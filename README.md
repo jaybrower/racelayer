@@ -37,6 +37,7 @@ Four-corner tire temperature display with color-coded heat mapping — cold to h
 
 ## Features
 
+- **Launch on startup** — optional Windows login item so RaceLayer is waiting in the tray whenever you sit down to race; toggle in Settings
 - **Per-session-type visibility** — configure each overlay and element independently for practice, qualifying, and race sessions
 - **Auto-hide unsupported elements** — overlays and indicators that require car-specific data (surface tire temps, TC, ABS) are automatically hidden when the current car doesn't expose them
 - **Safety rating badges** — Safety Rating column shows a color-coded letter+icon badge (red/yellow/green/blue) based on sub-rating value for instant at-a-glance reads
@@ -67,6 +68,7 @@ Press `Ctrl+Shift+L` to enter Layout Mode. All overlays become draggable — pos
 
 ### Settings
 
+- **General** — toggle launch on Windows startup
 - **Developer Mode** — show overlays with simulated data without iRacing running; choose which session type to simulate
 - **Keyboard Shortcuts** — click Edit next to any shortcut and press your preferred key combo
 - **Overlay Visibility** — checkboxes to show or hide each overlay and individual elements per session type

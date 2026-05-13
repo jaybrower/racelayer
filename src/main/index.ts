@@ -301,10 +301,21 @@ function registerDevModeIpc() {
   })
 }
 
+function registerStartupIpc() {
+  ipcMain.handle('startup:get', () => {
+    return app.getLoginItemSettings().openAtLogin
+  })
+
+  ipcMain.handle('startup:set', (_event, enable: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: enable })
+  })
+}
+
 app.whenReady().then(async () => {
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
   registerDevModeIpc()
+  registerStartupIpc()
 
   // Use actual display bounds so positions scale to any monitor/DPI
   const { width, height } = screen.getPrimaryDisplay().workAreaSize

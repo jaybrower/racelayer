@@ -24,5 +24,7 @@ interface Window {
     getWindowPosition: () => Promise<{ x: number; y: number }>
     setWindowPosition: (x: number, y: number) => void
     removeAllListeners: (channel: string) => void
+    getStartupEnabled: () => Promise<boolean>
+    setStartupEnabled: (enable: boolean) => Promise<void>
   }
 }

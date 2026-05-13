@@ -54,6 +54,12 @@ const iracingOverlay = {
   removeAllListeners: (channel: string) => {
     ipcRenderer.removeAllListeners(channel)
   },
+  getStartupEnabled: (): Promise<boolean> => {
+    return ipcRenderer.invoke('startup:get')
+  },
+  setStartupEnabled: (enable: boolean): Promise<void> => {
+    return ipcRenderer.invoke('startup:set', enable)
+  },
 }
 
 if (process.contextIsolated) {

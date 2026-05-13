@@ -355,13 +355,20 @@ export default function Settings() {
   const [devMode, setDevModeLocal] = useState<DevModeState>(DEFAULT_DEV)
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(DEFAULT_SHORTCUTS)
   const [saving, setSaving] = useState(false)
+  const [launchOnStartup, setLaunchOnStartup] = useState(false)
 
   useEffect(() => {
     window.iracingOverlay.getDevMode().then(setDevModeLocal)
     window.iracingOverlay.getShortcuts().then(setShortcuts)
+    window.iracingOverlay.getStartupEnabled().then(setLaunchOnStartup)
 
     window.iracingOverlay.onDevModeChanged(setDevModeLocal)
     return () => window.iracingOverlay.removeAllListeners('devMode:changed')
+  }, [])
+
+  const toggleStartup = useCallback(async (enabled: boolean) => {
+    setLaunchOnStartup(enabled)
+    await window.iracingOverlay.setStartupEnabled(enabled)
   }, [])
 
   const applyDevPatch = useCallback(async (patch: Partial<DevModeState>) => {
@@ -391,6 +398,33 @@ export default function Settings() {
       </div>
 
       <div className={styles.body}>
+
+        {/* General */}
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionTitle}>General</span>
+          </div>
+          <div className={styles.sectionBody}>
+            <div className={styles.toggleRow}>
+              <div className={styles.toggleInfo}>
+                <div className={styles.toggleLabel}>Launch on startup</div>
+                <div className={styles.toggleDesc}>
+                  Automatically start RaceLayer when you log into Windows.
+                  The app runs silently in the system tray until iRacing launches.
+                </div>
+              </div>
+              <label className={styles.toggle}>
+                <input
+                  type="checkbox"
+                  checked={launchOnStartup}
+                  onChange={(e) => toggleStartup(e.target.checked)}
+                />
+                <span className={styles.toggleTrack} />
+                <span className={styles.toggleThumb} />
+              </label>
+            </div>
+          </div>
+        </div>
 
         {/* Developer Mode */}
         <div className={styles.section}>

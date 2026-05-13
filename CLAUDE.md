@@ -107,6 +107,8 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 | `window:getPosition` | renderer → main | Get window's current screen position |
 | `window:setPosition` | renderer → main | Move window during custom drag |
 | `positions:reset` | renderer → main | Reset all overlay positions to defaults |
+| `startup:get` | renderer → main | Returns `boolean` — whether app is registered as a login item |
+| `startup:set` | renderer → main | Accepts `boolean` — registers or removes the Windows login item |
 
 ### Telemetry Pipeline
 
@@ -237,11 +239,14 @@ Code exists in `src/renderer/src/overlays/Radar/`. Disabled because `CarIdxF2Tim
 
 ## Settings Window (680×560)
 
-Four sections:
-1. **Developer Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
-2. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
-3. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
-4. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button
+Five sections:
+1. **General** — launch-on-startup toggle (calls `app.setLoginItemSettings`; reads back on mount via `app.getLoginItemSettings`)
+2. **Developer Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
+3. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
+4. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
+5. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button
+
+IPC channels for startup: `startup:get` (returns `boolean`) and `startup:set` (accepts `boolean`). Both call Electron's `app.getLoginItemSettings()` / `app.setLoginItemSettings()` which writes the Windows login item registry key — no additional libraries needed.
 
 Default shortcuts:
 - Layout Mode (toggle drag): `Ctrl+Shift+L`
