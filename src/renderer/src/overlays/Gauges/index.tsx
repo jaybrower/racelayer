@@ -102,27 +102,40 @@ function TraceChart({ throttle, brake }: { throttle: number; brake: number }) {
  *   • Faded / "OFF" label when the dial is set to 0.
  *   • Amber border + background when the system is actively intervening.
  */
-function AidBlock({ label, level, active }: { label: string; level: number; active: boolean }) {
+function AidBlock({
+  label, level, active, activeColor,
+}: {
+  label: string
+  level: number
+  active: boolean
+  /** Solid hex color used for border, label, and dot when the aid is firing */
+  activeColor: string
+}) {
   const off = level < 0.5
+  // Convert #rrggbb → rgba(r,g,b,α) for border and background tints
+  const hex = activeColor.replace('#', '')
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
   return (
     <div
       className={styles.aidBlock}
       style={{
-        borderColor: active ? 'rgba(251,191,36,0.75)' : 'rgba(100,116,139,0.25)',
-        background:  active ? 'rgba(251,191,36,0.10)'  : 'rgba(255,255,255,0.03)',
+        borderColor: active ? `rgba(${r},${g},${b},0.75)` : 'rgba(100,116,139,0.25)',
+        background:  active ? `rgba(${r},${g},${b},0.10)` : 'rgba(255,255,255,0.03)',
         opacity:     off ? 0.35 : 1,
       }}
     >
       <span
         className={styles.aidLabel}
-        style={{ color: active ? '#fbbf24' : '#64748b' }}
+        style={{ color: active ? activeColor : '#64748b' }}
       >
         {label}
       </span>
       <span className={styles.aidLevel}>{off ? 'OFF' : Math.round(level)}</span>
       <div
         className={styles.aidDot}
-        style={{ background: active ? '#fbbf24' : 'rgba(100,116,139,0.25)' }}
+        style={{ background: active ? activeColor : 'rgba(100,116,139,0.25)' }}
       />
     </div>
   )
@@ -216,8 +229,8 @@ export default function Gauges() {
         )}
 
         {/* Driver aids — shown next to gear when car supports them */}
-        {show.tc  && <AidBlock label="TC"  level={t.tc.level}  active={t.tc.active}  />}
-        {show.abs && <AidBlock label="ABS" level={t.abs.level} active={t.abs.active} />}
+        {show.tc  && <AidBlock label="TC"  level={t.tc.level}  active={t.tc.active}  activeColor="#fbbf24" />}
+        {show.abs && <AidBlock label="ABS" level={t.abs.level} active={t.abs.active} activeColor="#a78bfa" />}
 
         {/* Speed */}
         {show.speed && (
