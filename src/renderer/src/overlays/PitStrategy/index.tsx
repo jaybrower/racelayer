@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from 'react'
 import { useTelemetry } from '../../contexts/TelemetryContext'
 import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
-import type { SessionType } from '../../types/telemetry'
+import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
 import styles from './PitStrategy.module.css'
 
 const LAP_TIME_ESTIMATE = 92   // seconds — used only as last-resort estimate on lap 1
@@ -29,11 +29,9 @@ interface LapRecord {
   diff: number  // vs. stint baseline
 }
 
-// Session types where this overlay is useful
-const SHOWN_SESSIONS: SessionType[] = ['practice', 'race']
-
 export default function PitStrategy() {
   const t = useTelemetry()
+  const { config } = useOverlayConfig()
 
   // ── Lap-time history ─────────────────────────────────────────────────────────
   const lapHistoryRef = useRef<LapRecord[]>([])
@@ -127,23 +125,19 @@ export default function PitStrategy() {
   const editMode = useEditMode()
   const { onMouseDown, dragging } = useDrag(editMode)
 
+  const sType = t.sessionType === 'unknown' ? 'practice' : t.sessionType
+  const sec = config.pitStrategy.sections
+  const showFuel      = sec.fuel[sType]
+  const showTireDeg   = sec.tireDeg[sType]
+  const showPitWindow = sec.pitWindow[sType]
+
   const containerProps = {
     className: `${styles.container} ${editMode ? styles.editMode : ''}`,
     onMouseDown,
     style: { cursor: editMode ? (dragging ? 'grabbing' : 'grab') : 'default' } as React.CSSProperties,
   }
 
-  if (!SHOWN_SESSIONS.includes(t.sessionType)) {
-    return (
-      <div {...containerProps}>
-        {editMode && <div className={styles.editBanner}>✥ DRAG TO REPOSITION</div>}
-        <div className={styles.header}>
-          <span className={styles.label}>PIT STRATEGY</span>
-        </div>
-        <div className={styles.muted}>Not available in {t.sessionType} session</div>
-      </div>
-    )
-  }
+  if (!config.pitStrategy.enabled[sType] && !editMode) return null
 
   if (!t.connected) {
     return (
@@ -164,33 +158,35 @@ export default function PitStrategy() {
       </div>
 
       {/* Fuel section */}
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>FUEL</div>
-        <div className={styles.statRow}>
-          <span className={styles.statLabel}>Current</span>
-          <span className={styles.statValue}>{t.fuelLevel.toFixed(1)} L</span>
+      {showFuel && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>FUEL</div>
+          <div className={styles.statRow}>
+            <span className={styles.statLabel}>Current</span>
+            <span className={styles.statValue}>{t.fuelLevel.toFixed(1)} L</span>
+          </div>
+          <div className={styles.statRow}>
+            <span className={styles.statLabel}>
+              {fuelPerLapSamplesRef.current.length > 0 ? 'Per lap (avg)' : 'Per lap (est.)'}
+            </span>
+            <span className={styles.statValue}>
+              {stats.hasReliableEstimate ? `${stats.fuelPerLap.toFixed(2)} L` : '--'}
+            </span>
+          </div>
+          <div className={styles.statRow}>
+            <span className={styles.statLabel}>Laps remaining</span>
+            <span
+              className={styles.statValue}
+              style={{ color: stats.lapsOnFuel < 3 ? '#f87171' : stats.lapsOnFuel < 6 ? '#fbbf24' : '#4ade80' }}
+            >
+              {stats.lapsOnFuel > 0 ? stats.lapsOnFuel.toFixed(1) : '--'}
+            </span>
+          </div>
         </div>
-        <div className={styles.statRow}>
-          <span className={styles.statLabel}>
-            {fuelPerLapSamplesRef.current.length > 0 ? 'Per lap (avg)' : 'Per lap (est.)'}
-          </span>
-          <span className={styles.statValue}>
-            {stats.hasReliableEstimate ? `${stats.fuelPerLap.toFixed(2)} L` : '--'}
-          </span>
-        </div>
-        <div className={styles.statRow}>
-          <span className={styles.statLabel}>Laps remaining</span>
-          <span
-            className={styles.statValue}
-            style={{ color: stats.lapsOnFuel < 3 ? '#f87171' : stats.lapsOnFuel < 6 ? '#fbbf24' : '#4ade80' }}
-          >
-            {stats.lapsOnFuel > 0 ? stats.lapsOnFuel.toFixed(1) : '--'}
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* Tire degradation */}
-      {stats.lapHistory.length > 0 && (
+      {showTireDeg && stats.lapHistory.length > 0 && (
         <div className={styles.section}>
           <div className={styles.sectionTitle}>TIRE DEG — THIS STINT</div>
           {stats.lapHistory.map((rec) => (
@@ -216,7 +212,7 @@ export default function PitStrategy() {
       )}
 
       {/* Pit window */}
-      {stats.pitLap && (
+      {showPitWindow && stats.pitLap && (
         <div className={styles.pitWindow}>
           <span className={styles.pitWindowLabel}>Pit by</span>
           <span className={styles.pitWindowLap}>Lap {stats.pitLap}</span>

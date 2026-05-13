@@ -77,14 +77,15 @@
 
 .row {
   display: grid;
-  grid-template-columns: 34px 28px 30px 1fr 48px 50px 62px;
+  grid-template-columns: 34px 28px 30px 1fr 48px 44px 54px 62px;
   align-items: center;
   gap: 0;
   padding: 4px 12px;
   transition: background 0.1s;
 }
 
-/* Adjust columns when delta column is absent — handled inline via hidden element */
+/* All optional columns (delta, iRating, SR, irChange) use visibility:hidden so the
+   grid layout stays stable regardless of which columns are active. */
 
 .row:hover {
   background: rgba(255, 255, 255, 0.03);
@@ -132,6 +133,12 @@
 .safety {
   font-size: 11px;
   color: #94a3b8;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.irChange {
+  font-size: 11px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

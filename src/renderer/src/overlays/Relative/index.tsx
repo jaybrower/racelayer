@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useTelemetry } from '../../contexts/TelemetryContext'
 import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
+import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
 import type { CarTelemetry, DriverInfo, SessionType } from '../../types/telemetry'
 import styles from './Relative.module.css'
 
@@ -10,15 +11,60 @@ interface RelativeEntry {
   driver: DriverInfo
   gapSeconds: number
   positionDelta: number
+  irChange: number | null
   isPlayer: boolean
 }
 
-// Per-session-type display config (will be driven by config file later)
-const SESSION_CONFIG: Record<SessionType, { carsAbove: number; carsBelow: number; showIR: boolean; showSR: boolean; showDelta: boolean }> = {
-  practice:   { carsAbove: 5, carsBelow: 5, showIR: true,  showSR: true,  showDelta: false },
-  qualifying: { carsAbove: 3, carsBelow: 3, showIR: true,  showSR: false, showDelta: false },
-  race:       { carsAbove: 5, carsBelow: 5, showIR: false, showSR: true,  showDelta: true  },
-  unknown:    { carsAbove: 5, carsBelow: 5, showIR: true,  showSR: true,  showDelta: false },
+const CARS_ABOVE: Record<SessionType, number> = {
+  practice: 5, qualifying: 3, race: 5, unknown: 5,
+}
+const CARS_BELOW: Record<SessionType, number> = {
+  practice: 5, qualifying: 3, race: 5, unknown: 5,
+}
+
+/**
+ * Estimate per-car iRating change using a community-reverse-engineered approximation
+ * of iRacing's Elo-style formula.
+ *
+ * Only meaningful for official race sessions where iRating is on the line — but we
+ * compute it here regardless and let the caller decide whether to show it.
+ *
+ * Formula:
+ *   expectedPosition = 1 + Σ P(opponent beats car)
+ *   P(opponent beats car) = 1 / (1 + 10^((myIR - opponentIR) / 1000))
+ *   iRΔ ≈ round((expectedPos - actualPos) × (200 / N))
+ *
+ * Returns a Map from carIdx → estimated iRating delta.
+ * Returns an empty Map if fewer than 2 rated cars are in the session.
+ */
+function computeIRChanges(
+  cars: CarTelemetry[],
+  drivers: DriverInfo[],
+): Map<number, number> {
+  const ratedCars = cars
+    .filter((c) => c.position > 0)
+    .map((c) => ({
+      carIdx:   c.carIdx,
+      position: c.position,
+      iRating:  drivers.find((d) => d.carIdx === c.carIdx)?.iRating ?? 0,
+    }))
+    .filter((c) => c.iRating > 0)
+
+  if (ratedCars.length < 2) return new Map()
+
+  const N = ratedCars.length
+  const result = new Map<number, number>()
+
+  for (const car of ratedCars) {
+    let expectedPos = 1
+    for (const other of ratedCars) {
+      if (other.carIdx === car.carIdx) continue
+      expectedPos += 1 / (1 + Math.pow(10, (car.iRating - other.iRating) / 1000))
+    }
+    result.set(car.carIdx, Math.round((expectedPos - car.position) * (200 / N)))
+  }
+
+  return result
 }
 
 function formatGap(seconds: number): string {
@@ -28,17 +74,25 @@ function formatGap(seconds: number): string {
   return `${sign}${abs.toFixed(3)}`
 }
 
-function formatLapTime(s: number): string {
-  if (s <= 0) return '--:--.---'
-  const m = Math.floor(s / 60)
-  const sec = (s % 60).toFixed(3).padStart(6, '0')
-  return `${m}:${sec}`
-}
-
 export default function Relative() {
   const telemetry = useTelemetry()
-  const cfg = SESSION_CONFIG[telemetry.sessionType] ?? SESSION_CONFIG.unknown
+  const { config } = useOverlayConfig()
+  const editMode = useEditMode()
+  const { onMouseDown, dragging } = useDrag(editMode)
 
+  const sType = telemetry.sessionType === 'unknown' ? 'practice' : telemetry.sessionType
+
+  const cols = config.relative.columns
+  const cfg = {
+    showIR:       cols.iRating[sType],
+    showSR:       cols.safetyRating[sType],
+    showDelta:    cols.positionDelta[sType],
+    showIRChange: cols.irChange[sType],
+    carsAbove:    CARS_ABOVE[sType],
+    carsBelow:    CARS_BELOW[sType],
+  }
+
+  // useMemo must come before any conditional return (Rules of Hooks)
   const { visibleEntries, playerPosition } = useMemo(() => {
     if (!telemetry.connected || telemetry.cars.length === 0) {
       return { visibleEntries: [], playerPosition: 0 }
@@ -46,23 +100,26 @@ export default function Relative() {
 
     const { cars, drivers, playerCarIdx } = telemetry
 
+    const irChanges = computeIRChanges(cars, drivers)
+
     const all: RelativeEntry[] = cars
       .filter((c) => c.onTrack)
       .map((car) => {
         const driver = drivers.find((d) => d.carIdx === car.carIdx) ?? {
-          carIdx: car.carIdx,
-          userName: `Car #${car.carIdx}`,
-          iRating: 0,
+          carIdx:       car.carIdx,
+          userName:     `Car #${car.carIdx}`,
+          iRating:      0,
           safetyRating: '? ?.??',
-          carNumber: '??',
-          carName: '',
+          carNumber:    '??',
+          carName:      '',
         }
         return {
           car,
           driver,
-          gapSeconds: car.f2Time,
+          gapSeconds:    car.f2Time,
           positionDelta: car.startPosition - car.position,
-          isPlayer: car.carIdx === playerCarIdx,
+          irChange:      irChanges.get(car.carIdx) ?? null,
+          isPlayer:      car.carIdx === playerCarIdx,
         }
       })
       .sort((a, b) => a.gapSeconds - b.gapSeconds)
@@ -71,7 +128,7 @@ export default function Relative() {
     if (playerIdx === -1) return { visibleEntries: all, playerPosition: 0 }
 
     const start = Math.max(0, playerIdx - cfg.carsAbove)
-    const end = Math.min(all.length, playerIdx + cfg.carsBelow + 1)
+    const end   = Math.min(all.length, playerIdx + cfg.carsBelow + 1)
 
     return {
       visibleEntries: all.slice(start, end),
@@ -79,14 +136,10 @@ export default function Relative() {
     }
   }, [telemetry, cfg.carsAbove, cfg.carsBelow])
 
-  const editMode = useEditMode()
-  const { onMouseDown, dragging } = useDrag(editMode)
+  if (!config.relative.enabled[sType] && !editMode) return null
 
   const sessionLabel: Record<SessionType, string> = {
-    practice: 'PRACTICE',
-    qualifying: 'QUALIFY',
-    race: 'RACE',
-    unknown: '---',
+    practice: 'PRACTICE', qualifying: 'QUALIFY', race: 'RACE', unknown: '---',
   }
 
   return (
@@ -120,9 +173,14 @@ function DriverRow({
   cfg,
 }: {
   entry: RelativeEntry
-  cfg: { showIR: boolean; showSR: boolean; showDelta: boolean }
+  cfg: {
+    showIR: boolean
+    showSR: boolean
+    showDelta: boolean
+    showIRChange: boolean
+  }
 }) {
-  const { car, driver, gapSeconds, positionDelta, isPlayer } = entry
+  const { car, driver, gapSeconds, positionDelta, irChange, isPlayer } = entry
 
   const deltaColor = positionDelta > 0 ? '#4ade80' : positionDelta < 0 ? '#f87171' : '#6b7280'
   const deltaText =
@@ -137,15 +195,25 @@ function DriverRow({
   // Position 0 means no classification (practice) — show '--' instead of 'P0'
   const posLabel = car.position > 0 ? `P${car.position}` : '--'
 
+  const irChangeColor =
+    irChange === null ? '#64748b'
+    : irChange > 0    ? '#4ade80'
+    : irChange < 0    ? '#f87171'
+    :                   '#94a3b8'
+
+  const irChangeText =
+    irChange === null ? ''
+    : irChange > 0    ? `+${irChange}`
+    : String(irChange)
+
   return (
     <div className={`${styles.row} ${isPlayer ? styles.playerRow : ''}`}>
       <span className={styles.position} style={{ color: isPlayer ? '#fbbf24' : '#38bdf8' }}>
         {posLabel}
       </span>
 
-      {/* Always render the delta cell — hiding it with visibility keeps the grid columns
-          stable regardless of session type. Conditionally omitting it shifts every
-          subsequent child into the wrong column. */}
+      {/* Always render every cell — visibility:hidden keeps grid columns stable.
+          Conditionally omitting a cell shifts subsequent children into wrong columns. */}
       <span
         className={styles.delta}
         style={{ color: deltaColor, visibility: cfg.showDelta ? 'visible' : 'hidden' }}
@@ -155,17 +223,27 @@ function DriverRow({
 
       <span className={styles.carNum}>#{driver.carNumber}</span>
 
-      <span className={styles.name} style={{ fontWeight: isPlayer ? 700 : 400, color: isPlayer ? '#fbbf24' : '#f1f5f9' }}>
+      <span
+        className={styles.name}
+        style={{ fontWeight: isPlayer ? 700 : 400, color: isPlayer ? '#fbbf24' : '#f1f5f9' }}
+      >
         {driver.userName}
       </span>
 
-      {/* Same grid-stability pattern for IR / SR columns */}
       <span className={styles.irating} style={{ visibility: cfg.showIR ? 'visible' : 'hidden' }}>
         {driver.iRating > 0 ? driver.iRating.toLocaleString() : ''}
       </span>
 
       <span className={styles.safety} style={{ visibility: cfg.showSR ? 'visible' : 'hidden' }}>
         {driver.safetyRating !== '? ?.??' ? driver.safetyRating : ''}
+      </span>
+
+      <span
+        className={styles.irChange}
+        style={{ color: irChangeColor, visibility: cfg.showIRChange ? 'visible' : 'hidden' }}
+        title={irChange !== null ? 'Est. iRating change based on current positions' : ''}
+      >
+        {irChangeText}
       </span>
 
       <span className={styles.gap} style={{ color: gapColor }}>

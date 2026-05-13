@@ -21,10 +21,41 @@ export interface RadarConfig {
   enabled: SessionFlags
 }
 
+export interface RelativeConfig {
+  enabled: SessionFlags
+  columns: {
+    /** Driver's current iRating */
+    iRating:       SessionFlags
+    /** Driver's safety rating string (e.g. "A 4.32") */
+    safetyRating:  SessionFlags
+    /** Position gained / lost vs. starting grid (race only useful) */
+    positionDelta: SessionFlags
+    /**
+     * Estimated iRating change based on current race positions.
+     * Calculated via Elo-style expected-finish formula; only meaningful in
+     * official race sessions — label shows "(est.)" to set expectations.
+     * Will show 0 / N/A in AI, league, or non-official races where iR is
+     * unaffected.
+     */
+    irChange:      SessionFlags
+  }
+}
+
+export interface PitStrategyConfig {
+  enabled: SessionFlags
+  sections: {
+    fuel:      SessionFlags
+    tireDeg:   SessionFlags
+    pitWindow: SessionFlags
+  }
+}
+
 export interface OverlayConfig {
-  gauges:    GaugesConfig
-  tireTemps: TireTempsConfig
-  radar:     RadarConfig
+  gauges:      GaugesConfig
+  tireTemps:   TireTempsConfig
+  radar:       RadarConfig
+  relative:    RelativeConfig
+  pitStrategy: PitStrategyConfig
 }
 
 export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
@@ -45,6 +76,23 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
   radar: {
     enabled: { practice: false, qualifying: false, race: true },
   },
+  relative: {
+    enabled: { practice: true, qualifying: true, race: true },
+    columns: {
+      iRating:       { practice: true,  qualifying: true,  race: false },
+      safetyRating:  { practice: true,  qualifying: false, race: true  },
+      positionDelta: { practice: false, qualifying: false, race: true  },
+      irChange:      { practice: false, qualifying: false, race: true  },
+    },
+  },
+  pitStrategy: {
+    enabled: { practice: true, qualifying: false, race: true },
+    sections: {
+      fuel:      { practice: true,  qualifying: false, race: true  },
+      tireDeg:   { practice: true,  qualifying: false, race: true  },
+      pitWindow: { practice: false, qualifying: false, race: true  },
+    },
+  },
 }
 
 /** Deep-merge stored config on top of defaults so new fields get their default values. */
@@ -62,9 +110,13 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
     }
   }
 
-  const storedGauges = (s.gauges ?? {}) as Record<string, unknown>
-  const storedEl     = (storedGauges.elements ?? {}) as Record<string, unknown>
-  const def          = DEFAULT_OVERLAY_CONFIG
+  const storedGauges   = (s.gauges      ?? {}) as Record<string, unknown>
+  const storedEl       = (storedGauges.elements ?? {}) as Record<string, unknown>
+  const storedRel      = (s.relative    ?? {}) as Record<string, unknown>
+  const storedRelCols  = (storedRel.columns    ?? {}) as Record<string, unknown>
+  const storedPit      = (s.pitStrategy ?? {}) as Record<string, unknown>
+  const storedPitSecs  = (storedPit.sections   ?? {}) as Record<string, unknown>
+  const def            = DEFAULT_OVERLAY_CONFIG
 
   return {
     gauges: {
@@ -83,6 +135,23 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
     },
     radar: {
       enabled: mergeSF(def.radar.enabled, (s.radar as any)?.enabled),
+    },
+    relative: {
+      enabled: mergeSF(def.relative.enabled, storedRel.enabled),
+      columns: {
+        iRating:       mergeSF(def.relative.columns.iRating,       storedRelCols.iRating),
+        safetyRating:  mergeSF(def.relative.columns.safetyRating,  storedRelCols.safetyRating),
+        positionDelta: mergeSF(def.relative.columns.positionDelta, storedRelCols.positionDelta),
+        irChange:      mergeSF(def.relative.columns.irChange,      storedRelCols.irChange),
+      },
+    },
+    pitStrategy: {
+      enabled: mergeSF(def.pitStrategy.enabled, storedPit.enabled),
+      sections: {
+        fuel:      mergeSF(def.pitStrategy.sections.fuel,      storedPitSecs.fuel),
+        tireDeg:   mergeSF(def.pitStrategy.sections.tireDeg,   storedPitSecs.tireDeg),
+        pitWindow: mergeSF(def.pitStrategy.sections.pitWindow, storedPitSecs.pitWindow),
+      },
     },
   }
 }

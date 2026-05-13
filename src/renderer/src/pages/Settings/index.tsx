@@ -116,6 +116,71 @@ function OverlayConfigSection() {
           onChange={(st, val) => patch(c => { c.tireTemps.enabled[st] = val; return c })}
         />
 
+        {/* ── Relative ── */}
+        <tr><td colSpan={4} className={styles.cfgSpacer} /></tr>
+        <OverlayRow
+          label="Relative"
+          flags={config.relative.enabled}
+          onChange={(st, val) => patch(c => { c.relative.enabled[st] = val; return c })}
+        />
+        <OverlayRow
+          label="iRating"
+          flags={config.relative.columns.iRating}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
+          onChange={(st, val) => patch(c => { c.relative.columns.iRating[st] = val; return c })}
+        />
+        <OverlayRow
+          label="Safety Rating"
+          flags={config.relative.columns.safetyRating}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
+          onChange={(st, val) => patch(c => { c.relative.columns.safetyRating[st] = val; return c })}
+        />
+        <OverlayRow
+          label="Position Change"
+          flags={config.relative.columns.positionDelta}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
+          onChange={(st, val) => patch(c => { c.relative.columns.positionDelta[st] = val; return c })}
+        />
+        <OverlayRow
+          label="Est. iR Change"
+          flags={config.relative.columns.irChange}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
+          onChange={(st, val) => patch(c => { c.relative.columns.irChange[st] = val; return c })}
+        />
+
+        {/* ── Pit Strategy ── */}
+        <tr><td colSpan={4} className={styles.cfgSpacer} /></tr>
+        <OverlayRow
+          label="Pit Strategy"
+          flags={config.pitStrategy.enabled}
+          onChange={(st, val) => patch(c => { c.pitStrategy.enabled[st] = val; return c })}
+        />
+        <OverlayRow
+          label="Fuel"
+          flags={config.pitStrategy.sections.fuel}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.pitStrategy.enabled[st])}
+          onChange={(st, val) => patch(c => { c.pitStrategy.sections.fuel[st] = val; return c })}
+        />
+        <OverlayRow
+          label="Tire Degradation"
+          flags={config.pitStrategy.sections.tireDeg}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.pitStrategy.enabled[st])}
+          onChange={(st, val) => patch(c => { c.pitStrategy.sections.tireDeg[st] = val; return c })}
+        />
+        <OverlayRow
+          label="Pit Window"
+          flags={config.pitStrategy.sections.pitWindow}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.pitStrategy.enabled[st])}
+          onChange={(st, val) => patch(c => { c.pitStrategy.sections.pitWindow[st] = val; return c })}
+        />
+
         {/* Radar intentionally omitted — re-enable once better positional data is available */}
       </tbody>
     </table>
