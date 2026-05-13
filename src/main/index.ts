@@ -316,7 +316,10 @@ app.whenReady().then(async () => {
     { name: 'gauges',       route: 'gauges',        width: 860, height: 180, ...defaults.gauges },
     { name: 'pit-strategy', route: 'pit-strategy',  width: 360, height: 420, ...defaults['pit-strategy'] },
     { name: 'tire-temps',   route: 'tire-temps',    width: 220, height: 145, ...defaults['tire-temps'] },
-    { name: 'radar',        route: 'radar',          width: 180, height: 320, ...defaults.radar },
+    // Radar is disabled — iRacing's CarIdxF2Time data isn't granular enough to be
+    // useful as a proximity display. Code kept in src/renderer/src/overlays/Radar/
+    // for a future revisit once better positional data is available.
+    // { name: 'radar', route: 'radar', width: 180, height: 320, ...defaults.radar },
   ]
 
   for (const def of OVERLAYS) {
