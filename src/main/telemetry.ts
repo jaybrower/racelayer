@@ -3,6 +3,12 @@ import { getDevMode } from './devMode.js'
 export type SessionType = 'practice' | 'qualifying' | 'race' | 'unknown'
 export type TireCorner = readonly [number, number, number]
 
+export interface CarCapabilities {
+  hasSurfaceTireTemps: boolean
+  hasTractionControl: boolean
+  hasABS: boolean
+}
+
 export interface DriverInfo {
   carIdx: number
   userName: string
@@ -56,6 +62,7 @@ export interface IRacingTelemetry {
 
   cars: CarTelemetry[]
   drivers: DriverInfo[]
+  capabilities: CarCapabilities
 }
 
 export type TelemetryCallback = (telemetry: IRacingTelemetry) => void

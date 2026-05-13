@@ -49,6 +49,25 @@ function OverlayConfigSection() {
   const gDisabled = (st: SType) => !config.gauges.enabled[st]
 
   return (
+    <>
+    <div className={styles.toggleRow} style={{ marginBottom: 14 }}>
+      <div className={styles.toggleInfo}>
+        <div className={styles.toggleLabel}>Auto-hide unsupported overlays</div>
+        <div className={styles.toggleDesc}>
+          Hides overlays that require features the current car doesn't support
+          (e.g. Tire Temps is hidden for cars without live surface temp data).
+        </div>
+      </div>
+      <label className={styles.toggle}>
+        <input
+          type="checkbox"
+          checked={config.global.hideUnsupportedElements}
+          onChange={(e) => patch(c => { c.global.hideUnsupportedElements = e.target.checked; return c })}
+        />
+        <span className={styles.toggleTrack} />
+        <span className={styles.toggleThumb} />
+      </label>
+    </div>
     <table className={styles.cfgTable}>
       <thead>
         <tr>
@@ -184,6 +203,7 @@ function OverlayConfigSection() {
         {/* Radar intentionally omitted — re-enable once better positional data is available */}
       </tbody>
     </table>
+    </>
   )
 }
 

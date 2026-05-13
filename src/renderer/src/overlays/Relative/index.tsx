@@ -95,21 +95,23 @@ function computeIRChanges(
 }
 
 /**
- * iRacing license class colors — matches the badge colors shown in the iRacing UI.
- * Safety rating string format: "[Class] [sub-level]", e.g. "A 4.32" or "B 2.17".
+ * Map SR sub-level to a color, independent of license class.
+ * Matches the icon tiers so color + icon tell the same story at a glance:
+ *   ≤ 2.0  red    — danger / probation risk
+ *   ≤ 3.0  yellow — caution
+ *   ≤ 4.0  green  — solid
+ *   > 4.0  blue   — excellent
  */
-const LICENSE_COLOR: Record<string, string> = {
-  R:  '#c84b4b',  // Rookie — red
-  D:  '#e07c3a',  // D — orange
-  C:  '#c8b428',  // C — yellow
-  B:  '#4caf50',  // B — green
-  A:  '#3ea8e0',  // A — blue
-  P:  '#a78bfa',  // Pro
-  WC: '#a78bfa',  // World Class
+function srColor(sub: number): string {
+  if (sub <= 2.0) return '#f87171'  // red
+  if (sub <= 3.0) return '#fbbf24'  // yellow
+  if (sub <= 4.0) return '#4ade80'  // green
+  return '#38bdf8'                   // blue
 }
 
 /**
- * Render a compact safety-rating badge: class letter + tier icon.
+ * Render a compact safety-rating badge: class letter + tier icon, both colored
+ * by SR sub-level so the visual signal is immediate without reading the letter.
  *
  * Sub-level tiers:
  *   ≤ 2.0  →  !  (danger / probation risk)
@@ -117,14 +119,14 @@ const LICENSE_COLOR: Record<string, string> = {
  *   ≤ 4.0  →  ★  (solid)
  *   > 4.0  →  ✦  (excellent)
  *
- * Example output: "A✦" in blue, "B★" in green, "D!" in orange.
+ * Example output: "A✦" in blue, "B★" in green, "D!" in red.
  */
 function SafetyBadge({ rating }: { rating: string }) {
   const m = rating.match(/^([A-Z]+)\s+([\d.]+)$/)
   if (!m) return null
-  const cls = m[1]
-  const sub = parseFloat(m[2])
-  const color = LICENSE_COLOR[cls] ?? '#94a3b8'
+  const cls  = m[1]
+  const sub  = parseFloat(m[2])
+  const color = srColor(sub)
   const icon  = sub <= 2.0 ? '!' : sub <= 3.0 ? '▲' : sub <= 4.0 ? '★' : '✦'
   return <span style={{ color }}>{cls}{icon}</span>
 }

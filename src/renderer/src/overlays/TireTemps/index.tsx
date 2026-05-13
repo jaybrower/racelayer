@@ -65,7 +65,12 @@ export default function TireTemps() {
   const { config } = useOverlayConfig()
 
   const sType = t.sessionType === 'unknown' ? 'practice' : t.sessionType
-  if (!config.tireTemps.enabled[sType] && !editMode) return null
+
+  // Auto-hide if the connected car doesn't expose surface tire temps and the
+  // user hasn't disabled the smart-hide behaviour. Still show in edit mode so
+  // the overlay can be positioned before a supported car is loaded.
+  const unsupported = t.connected && !t.capabilities.hasSurfaceTireTemps
+  if ((!config.tireTemps.enabled[sType] || (unsupported && config.global.hideUnsupportedElements)) && !editMode) return null
 
   const containerClass = [
     styles.container,

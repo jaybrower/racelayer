@@ -1,6 +1,16 @@
 export type SType = 'practice' | 'qualifying' | 'race'
 export type SessionFlags = Record<SType, boolean>
 
+export interface GlobalConfig {
+  /**
+   * When true, overlays and elements that require car-specific telemetry
+   * (e.g. surface tire temps, TC, ABS) are automatically hidden when the
+   * current car doesn't expose those variables. Set to false to always show
+   * them regardless of support.
+   */
+  hideUnsupportedElements: boolean
+}
+
 export interface GaugesConfig {
   enabled: SessionFlags
   elements: {
@@ -51,6 +61,7 @@ export interface PitStrategyConfig {
 }
 
 export interface OverlayConfig {
+  global:      GlobalConfig
   gauges:      GaugesConfig
   tireTemps:   TireTempsConfig
   radar:       RadarConfig
@@ -59,6 +70,9 @@ export interface OverlayConfig {
 }
 
 export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
+  global: {
+    hideUnsupportedElements: true,
+  },
   gauges: {
     enabled: { practice: true, qualifying: true, race: true },
     elements: {
@@ -110,6 +124,7 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
     }
   }
 
+  const storedGlobal   = (s.global      ?? {}) as Record<string, unknown>
   const storedGauges   = (s.gauges      ?? {}) as Record<string, unknown>
   const storedEl       = (storedGauges.elements ?? {}) as Record<string, unknown>
   const storedRel      = (s.relative    ?? {}) as Record<string, unknown>
@@ -119,6 +134,11 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
   const def            = DEFAULT_OVERLAY_CONFIG
 
   return {
+    global: {
+      hideUnsupportedElements:
+        (storedGlobal.hideUnsupportedElements as boolean | undefined) ??
+        def.global.hideUnsupportedElements,
+    },
     gauges: {
       enabled: mergeSF(def.gauges.enabled, storedGauges.enabled),
       elements: {

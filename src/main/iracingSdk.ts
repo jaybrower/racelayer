@@ -10,7 +10,7 @@
  */
 
 import yaml from 'js-yaml'
-import type { IRacingTelemetry, DriverInfo, CarTelemetry, SessionType } from './telemetry.js'
+import type { IRacingTelemetry, DriverInfo, CarTelemetry, SessionType, CarCapabilities } from './telemetry.js'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -82,6 +82,9 @@ const startPositions = new Map<number, number>() // carIdx → grid position (ra
 // 'surface' = LFtempL/M/R  (live contact-patch, fast-changing)
 // 'carcass' = LFtempCL/CM/CR (internal structure, slow-changing)
 let tireTempMode: 'surface' | 'carcass' = 'carcass'
+
+// Feature flags for the current car — reset each time the shared memory is opened.
+let carCapabilities: CarCapabilities = { hasSurfaceTireTemps: false, hasTractionControl: false, hasABS: false }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -162,6 +165,7 @@ function closeMemory(): void {
   cachedRedLine = 0
   cachedMemType = null  // re-probe size on next connect
   tireTempMode = 'carcass'
+  carCapabilities = { hasSurfaceTireTemps: false, hasTractionControl: false, hasABS: false }
 }
 
 function readFullBuffer(): Buffer | null {
@@ -221,7 +225,14 @@ function buildVarMap(buf: Buffer): void {
   // Prefer live surface temps (LFtempL/M/R) if exposed by this SDK build;
   // fall back to slow carcass temps (LFtempCL/CM/CR).
   tireTempMode = varMap.has('LFtempL') ? 'surface' : 'carcass'
-  console.log(`[irsdk] built var map — ${varMap.size} variables, tire temps: ${tireTempMode}`)
+  carCapabilities = {
+    hasSurfaceTireTemps: varMap.has('LFtempL'),
+    hasTractionControl:  varMap.has('dcTractionControl'),
+    hasABS:              varMap.has('dcABS'),
+  }
+  console.log(`[irsdk] built var map — ${varMap.size} variables, tire temps: ${tireTempMode}` +
+    (carCapabilities.hasTractionControl ? ', TC' : '') +
+    (carCapabilities.hasABS ? ', ABS' : ''))
 }
 
 function parseSessionYaml(buf: Buffer): void {
@@ -413,7 +424,8 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
     }),
     carLeftRight: ri(buf, D, 'CarLeftRight'),
     cars,
-    drivers: cachedDrivers,
+    drivers:      cachedDrivers,
+    capabilities: carCapabilities,
   }
 }
 
@@ -427,4 +439,5 @@ const DISCONNECTED: IRacingTelemetry = {
   tireLF: [0, 0, 0], tireRF: [0, 0, 0], tireLR: [0, 0, 0], tireRR: [0, 0, 0],
   carLeftRight: 0,
   cars: [], drivers: [],
+  capabilities: { hasSurfaceTireTemps: false, hasTractionControl: false, hasABS: false },
 }

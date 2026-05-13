@@ -203,8 +203,10 @@ export function createMockPoller() {
       tireLR: state.tireLR,
       tireRR: state.tireRR,
       carLeftRight,
-      cars: carsRaw,
-      drivers: MOCK_DRIVERS,
+      cars:     carsRaw,
+      drivers:  MOCK_DRIVERS,
+      // Dev mode simulates a car with full capability support
+      capabilities: { hasSurfaceTireTemps: true, hasTractionControl: true, hasABS: true },
     }
   }
 
