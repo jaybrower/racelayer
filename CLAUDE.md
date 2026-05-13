@@ -1,0 +1,222 @@
+# RaceLayer — CLAUDE.md
+
+## What This Is
+
+An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
+
+App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.0`
+GitHub: `https://github.com/jaybrower/racelayer`
+
+## Project Structure
+
+```
+iracing-overlay/
+├── src/
+│   ├── main/                  # Electron main process (Node.js)
+│   │   ├── index.ts           # App entry: creates windows, tray, IPC, polling loop
+│   │   ├── iracingSdk.ts      # iRacing shared-memory reader via koffi FFI
+│   │   ├── telemetry.ts       # Polling loop + IRacingTelemetry type (main-side)
+│   │   ├── mockTelemetry.ts   # Simulated data for dev mode
+│   │   ├── config.ts          # Overlay config persistence (per-user JSON files)
+│   │   ├── devMode.ts         # Dev mode state (enable/disable + session type)
+│   │   └── shortcuts.ts       # Global keyboard shortcuts (register/update/save)
+│   ├── preload/
+│   │   └── index.ts           # contextBridge — exposes window.iracingOverlay API
+│   └── renderer/src/          # React frontend (Vite, TypeScript)
+│       ├── App.tsx            # HashRouter routes: one route per overlay + /settings
+│       ├── main.tsx           # React entry point
+│       ├── contexts/
+│       │   ├── TelemetryContext.tsx      # Subscribes to telemetry:update IPC events
+│       │   └── OverlayConfigContext.tsx  # Loads/saves overlay config via IPC
+│       ├── hooks/
+│       │   ├── useDrag.ts     # Custom drag via window:getPosition / window:setPosition IPC
+│       │   └── useEditMode.ts # Listens for overlay:editMode broadcast
+│       ├── overlays/
+│       │   ├── Gauges/        # RPM bar, input trace, gear, speed, delta, fuel
+│       │   ├── Relative/      # Proximity list (position, gap, iR, SR, pos Δ, est. iR Δ)
+│       │   ├── PitStrategy/   # Fuel calc, tire deg history, pit window
+│       │   ├── TireTemps/     # 4-corner temp display with color coding
+│       │   └── Radar/         # Disabled (code kept for future revisit)
+│       ├── pages/
+│       │   └── Settings/      # Settings window: dev mode, shortcuts, overlay config
+│       └── types/
+│           ├── telemetry.ts   # IRacingTelemetry, CarTelemetry, DriverInfo, SessionType
+│           ├── overlayConfig.ts  # OverlayConfig type, defaults, mergeWithDefaults
+│           ├── config.ts      # (legacy config type, may overlap overlayConfig)
+│           └── global.d.ts    # window.iracingOverlay type declaration
+├── resources/                 # App icons (icon.png, icon.ico, icon-tray.png)
+├── scripts/
+│   └── generate-icons.mjs    # Generates icon.png at multiple sizes + icon.ico
+├── electron.vite.config.ts   # Electron-Vite build config
+├── electron-builder.json5    # Packaging config (NSIS + portable, GitHub Releases)
+└── package.json
+```
+
+## Running Locally
+
+```bash
+# Dev (hot-reload, opens all overlay windows + settings)
+npm run dev
+
+# Type check only
+npx tsc --noEmit
+
+# Build + package (produces NSIS installer + portable .exe)
+npm run dist
+
+# Build without packaging (for testing the built output)
+npm run dist:dir
+
+# Regenerate app icons from scratch
+npm run icons
+```
+
+iRacing must be running for real telemetry. Use **Dev Mode** (Settings → Developer Mode) to show overlays with simulated data without iRacing.
+
+## Tech Stack
+
+- **Electron** (main process) — window management, IPC, tray, global shortcuts
+- **Vite + React 19 + TypeScript** (renderer) — overlay UIs, Settings page
+- **CSS Modules** — each overlay has its own `*.module.css`
+- **koffi** — FFI library to call Win32 APIs from Node.js (no native compilation needed)
+- **electron-vite** — unified build tool for Electron + Vite
+- **electron-builder** — packaging to NSIS installer + portable `.exe`
+
+## Architecture Patterns
+
+### How Overlays Work
+
+Each overlay is a separate `BrowserWindow` — transparent, frameless, `alwaysOnTop: 'screen-saver'`, `setIgnoreMouseEvents(true, { forward: true })`. All windows load the same renderer (`index.html`) at different hash routes (`#/relative`, `#/gauges`, etc.).
+
+Overlays are **hidden by default** and only shown (`showInactive()`) when iRacing reports connected. They're hidden again when iRacing disconnects.
+
+### IPC Channels
+
+| Channel | Direction | Description |
+|---|---|---|
+| `telemetry:update` | main → renderer | Fired every poll tick (60ms) with full `IRacingTelemetry` |
+| `overlay:editMode` | main → renderer | Broadcast when layout mode toggles |
+| `devMode:changed` | main → renderer | Broadcast on dev mode state change |
+| `config:changed` | main → renderer | Broadcast when any overlay config saved |
+| `config:get` | renderer → main | Load overlay config JSON |
+| `config:set` | renderer → main | Save overlay config JSON + broadcast |
+| `devMode:get/set` | renderer → main | Read/write dev mode state |
+| `shortcuts:get/set` | renderer → main | Read/update global shortcuts |
+| `window:getPosition` | renderer → main | Get window's current screen position |
+| `window:setPosition` | renderer → main | Move window during custom drag |
+| `positions:reset` | renderer → main | Reset all overlay positions to defaults |
+
+### Telemetry Pipeline
+
+1. `telemetry.ts` polls every ~60ms via `iracingSdk.ts`
+2. `iracingSdk.ts` reads iRacing's Windows named memory-mapped file (`Local\IRSDKMemMapFileName`) using koffi FFI calls to `OpenFileMapping` / `MapViewOfFile`
+3. Parses variable headers, builds `varMap`, reads typed values at byte offsets
+4. Constructs `IRacingTelemetry` and passes to the callback in `index.ts`
+5. `index.ts` calls `broadcastToAll('telemetry:update', telemetry)` to all overlay windows
+6. `TelemetryContext.tsx` in the renderer listens and stores in React state
+
+Dev mode bypasses iRacing entirely — `mockTelemetry.ts` generates simulated data.
+
+### Overlay Config System
+
+All overlays share a single unified config stored as `overlays.json` in the user's Electron `userData` directory. The config is typed in `src/renderer/src/types/overlayConfig.ts`.
+
+**Key types:**
+```typescript
+type SType = 'practice' | 'qualifying' | 'race'
+type SessionFlags = Record<SType, boolean>  // per-session-type toggle
+```
+
+Every configurable element uses `SessionFlags` so each can be independently toggled per session type. New overlays added to the config must also add a branch in `mergeWithDefaults()` so saved configs from older versions get the new field's default value.
+
+`OverlayConfigContext.tsx` loads config on mount, exposes `{ config, update }`. Each overlay reads from `useOverlayConfig()`.
+
+**Important hook ordering:** All hooks (`useTelemetry`, `useOverlayConfig`, `useEditMode`, `useDrag`, `useMemo`, `useRef`, `useEffect`) must be called **before** any conditional `return null` — enforce Rules of Hooks. Use `visibility: hidden` instead of conditional rendering for optional grid columns to keep CSS grid layout stable.
+
+### Window Position Persistence
+
+Saved in `<userData>/config/overlays/positions_<monitorKey>.json` where `monitorKey` encodes the current display configuration (bounds + positions of all monitors joined by `_`). Positions include `x`, `y`, `width`, `height`. Separate layouts per monitor config — plugging in/out a monitor doesn't break saved positions.
+
+Custom drag is implemented without `frame: true` drag — overlays use `setIgnoreMouseEvents` and pass `forward: true`, so mousedown events still reach the renderer. `useDrag` reads the window's current position via IPC, then sends new positions on `mousemove`.
+
+## iRacing SDK Notes
+
+**Shared memory:** `Local\IRSDKMemMapFileName` (named memory-mapped file, Windows only). The header describes variable offsets; `varMap` is built by parsing variable headers at startup.
+
+**Tire temp variables:**
+- `LFtempCL/CM/CR` — carcass (internal, slow-changing, always present)
+- `LFtempL/M/R` — surface (live, only present in some cars/configs)
+- At connect time, `tireTempMode` is set to `'surface'` or `'carcass'` based on whether `LFtempL` exists in `varMap`
+
+**CarIdxTrackSurface enum** (irsdk_TrkLoc):
+- `-1` = NotInWorld (skip these cars)
+- `0` = OffTrack
+- `1` = InPitStall
+- `2` = AproachingPits
+- `3` = OnTrack ← use this for `onTrack: true`
+
+**Position in practice:** `CarIdxPosition` returns `0` in practice sessions (no race classification). Show `--` instead of `P0`.
+
+**f2Time:** `CarIdxF2Time` — seconds relative to player. Negative = car is ahead of player. Used for relative gap display.
+
+**Fuel calc:** Don't use `fuelUsePerHour` for laps-remaining at rest (shows ~2 L/hr at idle = 1,300+ laps). Instead, measure actual fuel delta at lap boundaries (rolling 5-lap average). Fall back to `fuelUsePerHour` only when `> 5 L/hr` (engine actually under load).
+
+## Overlay Details
+
+### Gauges (`/gauges`, 860×180)
+RPM bar, throttle/brake input trace, gear indicator, speed, lap delta to best, fuel level. Each element independently configurable per session type.
+
+### Relative (`/relative`, 400×520)
+Shows cars within ±5 positions of player sorted by `f2Time`. 8-column grid:
+`34px 28px 30px 1fr 48px 44px 54px 62px`
+Columns: Position | Pos-Δ | Car# | Name | iRating | Safety Rating | Est. iR Δ | Gap
+
+Est. iR Δ uses an Elo-style formula:
+```
+expectedPos = 1 + Σ P(opponent beats car)  where P = 1/(1 + 10^((myIR - opponentIR)/1000))
+iRΔ ≈ round((expectedPos - actualPos) × (200 / N))
+```
+Only meaningful in official race sessions; always computed but shown/hidden via config.
+
+### Pit Strategy (`/pit-strategy`, 360×420)
+Three sections (each independently toggled via config):
+- **Fuel** — current level, per-lap consumption (measured at lap boundaries), laps remaining
+- **Tire Deg** — rolling 8-lap stint history, avg deg rate per lap
+- **Pit Window** — estimated last lap to pit based on current fuel
+
+### Tire Temps (`/tire-temps`, 220×145)
+4-corner colored blocks (inner/mid/outer). Color scale: `#1e293b` (cold/no data) → blue → green → yellow → red (hot). Uses surface temps if available, falls back to carcass temps (logged to console at connect time).
+
+### Radar (`/radar`, disabled)
+Code exists in `src/renderer/src/overlays/Radar/`. Disabled because `CarIdxF2Time` data isn't granular enough for a useful proximity display in practice. Window is commented out in `OVERLAYS` array in `index.ts`. Re-enable when better positional data is available.
+
+## Settings Window (680×560)
+
+Four sections:
+1. **Developer Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
+2. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
+3. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
+4. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button
+
+Default shortcuts:
+- Layout Mode (toggle drag): `Ctrl+Shift+L`
+- Open Settings: `Ctrl+Shift+O`
+
+## Packaging
+
+`electron-builder.json5` targets NSIS installer + portable `.exe`. Both in `dist/`.
+
+**Important `asarUnpack` entries:**
+- `resources/**` — PNG icons accessed at runtime via `app.getAppPath()`
+- `**/node_modules/koffi/**` — native FFI bindings can't be inside `.asar`
+
+Icon files live in `resources/` (generated by `scripts/generate-icons.mjs` using a canvas-based renderer). `buildResources/` (electron-builder default) is not used — icon path is explicitly configured.
+
+## Known Gotchas
+
+- **Bash tool can't `cd` into Windows paths** — use PowerShell (`Set-Location`) or pass absolute paths to git commands directly
+- **`enableLargerThanScreen: true`** is set on all overlay windows to bypass Windows shell constraint that clamps windows to the work area
+- **`koffi` must be in `asarUnpack`** or the FFI calls will fail in production builds
+- **`tireTempMode`** is module-level state in `iracingSdk.ts` — reset to `'carcass'` in `closeMemory()`
+- **Radar overlay** is intentionally excluded from the `OVERLAYS` array in `main/index.ts` and from the Settings config table — its window definition is commented out with an explanatory note
+- **`computeIRChanges`** returns an empty Map (not zeros) when fewer than 2 rated cars exist — callers should use `?? null` when reading from it
