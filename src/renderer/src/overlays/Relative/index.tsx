@@ -23,6 +23,33 @@ const CARS_BELOW: Record<SessionType, number> = {
 }
 
 /**
+ * Compute the gap in seconds between a car and the player using track position
+ * (CarIdxLapDistPct + CarIdxLap) rather than CarIdxF2Time.
+ *
+ * CarIdxF2Time is unreliable in practice sessions — it returns 0 for cars that
+ * haven't set a lap time and huge values for others.  LapDistPct is always valid
+ * and available for every on-track car.
+ *
+ * Algorithm:
+ *   diff = (car.lap + car.lapDistPct) - (playerLap + playerLapDistPct)
+ *   Wrap diff to [-0.5, 0.5] (shortest path on the circular track).
+ *   gapSeconds = -diff × referenceLapTime
+ *     (positive diff → car is ahead → negative gap → displayed with '-')
+ */
+function computeRelativeGap(
+  car: CarTelemetry,
+  playerLapDistPct: number,
+  playerLap: number,
+  referenceLapTime: number,
+): number {
+  const diff = (car.lap + car.lapDistPct) - (playerLap + playerLapDistPct)
+  // Wrap to [-0.5, 0.5]: "diff - nearest integer" gives the shortest circular path
+  const wrapped = diff - Math.round(diff)
+  // Positive wrapped → car is further along the track → is ahead → negative gap
+  return -wrapped * referenceLapTime
+}
+
+/**
  * Estimate per-car iRating change using a community-reverse-engineered approximation
  * of iRacing's Elo-style formula.
  *
@@ -100,6 +127,17 @@ export default function Relative() {
 
     const { cars, drivers, playerCarIdx } = telemetry
 
+    // Best available reference lap time for converting track-position diff → seconds.
+    // Prefer the player's personal best, then last lap, then any car's best in the session.
+    const referenceLapTime = (() => {
+      if (telemetry.lapBestLapTime > 0)  return telemetry.lapBestLapTime
+      if (telemetry.lapLastLapTime > 0)  return telemetry.lapLastLapTime
+      const sessionBest = cars
+        .filter((c) => c.bestLapTime > 0)
+        .reduce((best, c) => Math.min(best, c.bestLapTime), Infinity)
+      return Number.isFinite(sessionBest) ? sessionBest : 90
+    })()
+
     const irChanges = computeIRChanges(cars, drivers)
 
     const all: RelativeEntry[] = cars
@@ -113,13 +151,16 @@ export default function Relative() {
           carNumber:    '??',
           carName:      '',
         }
+        const isPlayer = car.carIdx === playerCarIdx
         return {
           car,
           driver,
-          gapSeconds:    car.f2Time,
+          gapSeconds:    isPlayer ? 0 : computeRelativeGap(
+            car, telemetry.lapDistPct, telemetry.lap, referenceLapTime,
+          ),
           positionDelta: car.startPosition - car.position,
           irChange:      irChanges.get(car.carIdx) ?? null,
-          isPlayer:      car.carIdx === playerCarIdx,
+          isPlayer,
         }
       })
       .sort((a, b) => a.gapSeconds - b.gapSeconds)
