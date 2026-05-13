@@ -134,18 +134,24 @@ function DriverRow({
 
   const gapColor = isPlayer ? 'transparent' : gapSeconds < 0 ? '#4ade80' : '#f87171'
   const gap = isPlayer ? '' : formatGap(gapSeconds)
+  // Position 0 means no classification (practice) — show '--' instead of 'P0'
+  const posLabel = car.position > 0 ? `P${car.position}` : '--'
 
   return (
     <div className={`${styles.row} ${isPlayer ? styles.playerRow : ''}`}>
       <span className={styles.position} style={{ color: isPlayer ? '#fbbf24' : '#38bdf8' }}>
-        P{car.position}
+        {posLabel}
       </span>
 
-      {cfg.showDelta && (
-        <span className={styles.delta} style={{ color: deltaColor }}>
-          {deltaText}
-        </span>
-      )}
+      {/* Always render the delta cell — hiding it with visibility keeps the grid columns
+          stable regardless of session type. Conditionally omitting it shifts every
+          subsequent child into the wrong column. */}
+      <span
+        className={styles.delta}
+        style={{ color: deltaColor, visibility: cfg.showDelta ? 'visible' : 'hidden' }}
+      >
+        {deltaText}
+      </span>
 
       <span className={styles.carNum}>#{driver.carNumber}</span>
 
@@ -153,13 +159,14 @@ function DriverRow({
         {driver.userName}
       </span>
 
-      {cfg.showIR && (
-        <span className={styles.irating}>{driver.iRating > 0 ? driver.iRating.toLocaleString() : ''}</span>
-      )}
+      {/* Same grid-stability pattern for IR / SR columns */}
+      <span className={styles.irating} style={{ visibility: cfg.showIR ? 'visible' : 'hidden' }}>
+        {driver.iRating > 0 ? driver.iRating.toLocaleString() : ''}
+      </span>
 
-      {cfg.showSR && (
-        <span className={styles.safety}>{driver.safetyRating !== '? ?.??' ? driver.safetyRating : ''}</span>
-      )}
+      <span className={styles.safety} style={{ visibility: cfg.showSR ? 'visible' : 'hidden' }}>
+        {driver.safetyRating !== '? ?.??' ? driver.safetyRating : ''}
+      </span>
 
       <span className={styles.gap} style={{ color: gapColor }}>
         {gap}

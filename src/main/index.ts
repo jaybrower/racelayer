@@ -234,20 +234,23 @@ function defaultOverlayPositions(width: number, height: number): Record<string, 
   }
 }
 
+interface WindowLayout { x: number; y: number; width: number; height: number }
+
 function saveWindowPositions() {
-  const positions: Record<string, { x: number; y: number }> = {}
+  const layouts: Record<string, WindowLayout> = {}
   windows.forEach((win, name) => {
     if (!win.isDestroyed()) {
       const [x, y] = win.getPosition()
-      positions[name] = { x, y }
+      const [width, height] = win.getSize()
+      layouts[name] = { x, y, width, height }
     }
   })
   const dir = positionsDir()
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  writeFileSync(positionsPath(), JSON.stringify(positions, null, 2), 'utf-8')
+  writeFileSync(positionsPath(), JSON.stringify(layouts, null, 2), 'utf-8')
 }
 
-function loadWindowPositions(): Record<string, { x: number; y: number }> {
+function loadWindowPositions(): Record<string, Partial<WindowLayout>> {
   const p = positionsPath()
   if (!existsSync(p)) return {}
   try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return {} }
@@ -318,7 +321,13 @@ app.whenReady().then(async () => {
 
   for (const def of OVERLAYS) {
     const saved = savedPositions[def.name]
-    createOverlayWindow(saved ? { ...def, x: saved.x, y: saved.y } : def)
+    createOverlayWindow(saved ? {
+      ...def,
+      x:      saved.x      ?? def.x,
+      y:      saved.y      ?? def.y,
+      width:  saved.width  ?? def.width,
+      height: saved.height ?? def.height,
+    } : def)
   }
 
   settingsWindow = createSettingsWindow()

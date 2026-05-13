@@ -8,9 +8,9 @@ import styles from './Radar.module.css'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /** How many seconds of the track to show on each side of the player */
-const WINDOW_S = 5
+const WINDOW_S = 12
 /** Pixels per second on the display */
-const PX_PER_S = 28
+const PX_PER_S = 12
 const TOTAL_H  = WINDOW_S * 2 * PX_PER_S  // full SVG height
 const SVG_W    = 160                        // SVG viewBox width
 
@@ -106,6 +106,10 @@ export default function Radar() {
       {editMode && <div className={styles.editBanner}>✥ DRAG TO REPOSITION</div>}
       <div className={styles.header}>RADAR</div>
 
+      {nearby.length === 0 && (
+        <div className={styles.noCars}>No cars within ±{WINDOW_S}s</div>
+      )}
+
       <div className={styles.svgWrap}>
         <svg
           viewBox={`0 0 ${SVG_W} ${TOTAL_H}`}
@@ -117,15 +121,17 @@ export default function Radar() {
           <line x1={SVG_W / 2} y1={0} x2={SVG_W / 2} y2={TOTAL_H}
             stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
 
-          {/* ── Time grid lines every 1 s ── */}
+          {/* ── Time grid lines every 3 s, labelled ── */}
           {Array.from({ length: WINDOW_S * 2 + 1 }, (_, i) => {
             const y = i * PX_PER_S
             const label = i - WINDOW_S
+            const showLabel = label !== 0 && label % 3 === 0
             return (
               <g key={i}>
                 <line x1={0} y1={y} x2={SVG_W} y2={y}
-                  stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
-                {label !== 0 && (
+                  stroke={label % 3 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'}
+                  strokeWidth="1" />
+                {showLabel && (
                   <text x={4} y={y + 9} fontSize="8"
                     fill="rgba(255,255,255,0.2)" fontFamily="system-ui">
                     {label > 0 ? `+${label}` : label}s
