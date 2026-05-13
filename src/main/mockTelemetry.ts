@@ -5,26 +5,26 @@ const LAP_TIME_BASE = 92.4 // seconds
 const NUM_CARS = 20
 
 const MOCK_DRIVERS: DriverInfo[] = [
-  { carIdx: 0,  userName: 'Carter, Blake',    iRating: 4821, safetyRating: 'A 4.52', carNumber: '07', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 1,  userName: 'Nguyen, Tyler',    iRating: 3940, safetyRating: 'A 2.91', carNumber: '14', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 2,  userName: 'Ramirez, Sofia',   iRating: 5103, safetyRating: 'A 4.88', carNumber: '22', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 3,  userName: 'Johansson, Erik',  iRating: 2874, safetyRating: 'B 3.14', carNumber: '33', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 4,  userName: 'Patel, Arjun',     iRating: 4512, safetyRating: 'A 3.67', carNumber: '44', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 5,  userName: 'Brower, Josiah',   iRating: 3201, safetyRating: 'B 4.10', carNumber: '55', carName: 'Porsche 992 GT3 Cup' }, // player
-  { carIdx: 6,  userName: 'Okafor, Chidi',    iRating: 3688, safetyRating: 'A 2.33', carNumber: '66', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 7,  userName: 'Müller, Hans',     iRating: 4234, safetyRating: 'A 4.01', carNumber: '77', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 8,  userName: 'Silva, Bruno',     iRating: 2156, safetyRating: 'B 2.88', carNumber: '88', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 9,  userName: 'Kim, Ji-ho',       iRating: 3901, safetyRating: 'A 3.55', carNumber: '9',  carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 10, userName: 'Kowalski, Marek',  iRating: 4677, safetyRating: 'A 4.71', carNumber: '10', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 11, userName: 'Fernandez, Luis',  iRating: 1988, safetyRating: 'C 3.22', carNumber: '11', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 12, userName: 'Thompson, Sarah',  iRating: 3344, safetyRating: 'A 1.98', carNumber: '12', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 13, userName: 'Dubois, Pierre',   iRating: 5401, safetyRating: 'A 4.99', carNumber: '13', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 14, userName: 'Andrews, James',   iRating: 2799, safetyRating: 'B 3.77', carNumber: '15', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 15, userName: 'Rossi, Marco',     iRating: 4102, safetyRating: 'A 4.22', carNumber: '16', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 16, userName: 'Chen, Wei',        iRating: 3567, safetyRating: 'A 2.66', carNumber: '17', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 17, userName: 'Petrov, Alexei',   iRating: 4890, safetyRating: 'A 4.44', carNumber: '18', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 18, userName: 'Nakamura, Yuki',   iRating: 3123, safetyRating: 'B 3.91', carNumber: '19', carName: 'Porsche 992 GT3 Cup' },
-  { carIdx: 19, userName: 'O\'Brien, Sean',   iRating: 2445, safetyRating: 'B 2.11', carNumber: '20', carName: 'Porsche 992 GT3 Cup' },
+  { carIdx: 0,  userName: 'Carter, Blake',    iRating: 4821, safetyRating: 'A 4.52', carNumber: '07', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 1,  userName: 'Nguyen, Tyler',    iRating: 3940, safetyRating: 'A 2.91', carNumber: '14', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 2,  userName: 'Ramirez, Sofia',   iRating: 5103, safetyRating: 'A 4.88', carNumber: '22', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 3,  userName: 'Johansson, Erik',  iRating: 2874, safetyRating: 'B 3.14', carNumber: '33', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 4,  userName: 'Patel, Arjun',     iRating: 4512, safetyRating: 'A 3.67', carNumber: '44', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 5,  userName: 'Brower, Josiah',   iRating: 3201, safetyRating: 'B 4.10', carNumber: '55', carName: 'Porsche 992 GT3 Cup', isAI: false }, // player
+  { carIdx: 6,  userName: 'Okafor, Chidi',    iRating: 3688, safetyRating: 'A 2.33', carNumber: '66', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 7,  userName: 'Müller, Hans',     iRating: 4234, safetyRating: 'A 4.01', carNumber: '77', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 8,  userName: 'Silva, Bruno',     iRating: 2156, safetyRating: 'B 2.88', carNumber: '88', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 9,  userName: 'Kim, Ji-ho',       iRating: 3901, safetyRating: 'A 3.55', carNumber: '9',  carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 10, userName: 'Kowalski, Marek',  iRating: 4677, safetyRating: 'A 4.71', carNumber: '10', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 11, userName: 'Fernandez, Luis',  iRating: 1988, safetyRating: 'C 3.22', carNumber: '11', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 12, userName: 'Thompson, Sarah',  iRating: 3344, safetyRating: 'A 1.98', carNumber: '12', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 13, userName: 'Dubois, Pierre',   iRating: 5401, safetyRating: 'A 4.99', carNumber: '13', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 14, userName: 'Andrews, James',   iRating: 2799, safetyRating: 'B 3.77', carNumber: '15', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 15, userName: 'Rossi, Marco',     iRating: 4102, safetyRating: 'A 4.22', carNumber: '16', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 16, userName: 'Chen, Wei',        iRating: 3567, safetyRating: 'A 2.66', carNumber: '17', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 17, userName: 'Petrov, Alexei',   iRating: 4890, safetyRating: 'A 4.44', carNumber: '18', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 18, userName: 'Nakamura, Yuki',   iRating: 3123, safetyRating: 'B 3.91', carNumber: '19', carName: 'Porsche 992 GT3 Cup', isAI: false },
+  { carIdx: 19, userName: 'O\'Brien, Sean',   iRating: 2445, safetyRating: 'B 2.11', carNumber: '20', carName: 'Porsche 992 GT3 Cup', isAI: false },
 ]
 
 // Starting track positions (lapDistPct) for each car, spread around the track

@@ -10,6 +10,7 @@ export interface DriverInfo {
   safetyRating: string // e.g. "A 4.32"
   carNumber: string
   carName: string
+  isAI: boolean
 }
 
 export interface CarTelemetry {

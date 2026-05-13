@@ -242,10 +242,11 @@ function parseSessionYaml(buf: Buffer): void {
       type: mapSessionType(String(s.SessionType ?? '')),
     }))
 
-    // Driver list — exclude pace cars and AI
+    // Driver list — exclude only the pace car; include AI drivers so their name
+    // and car number show correctly in the relative overlay.
     const drivers: unknown[] = (doc?.DriverInfo as any)?.Drivers ?? []
     cachedDrivers = (drivers as any[])
-      .filter((d) => !d.CarIsAI && !d.CarIsPaceCar)
+      .filter((d) => !d.CarIsPaceCar)
       .map((d) => ({
         carIdx:       Number(d.CarIdx ?? 0),
         userName:     String(d.UserName ?? ''),
@@ -253,9 +254,13 @@ function parseSessionYaml(buf: Buffer): void {
         safetyRating: String(d.LicString ?? ''),
         carNumber:    String(d.CarNumber ?? ''),
         carName:      String(d.CarPath ?? ''),
+        isAI:         Boolean(d.CarIsAI),
       } satisfies DriverInfo))
 
-    console.log(`[irsdk] session YAML refreshed — ${cachedDrivers.length} drivers, player car ${cachedPlayerCarIdx}`)
+    const aiCount = cachedDrivers.filter((d) => d.isAI).length
+    console.log(`[irsdk] session YAML refreshed — ${cachedDrivers.length} drivers` +
+      (aiCount ? ` (${aiCount} AI)` : '') +
+      `, player car ${cachedPlayerCarIdx}`)
   } catch (e) {
     console.warn('[irsdk] YAML parse error:', e)
   }

@@ -98,7 +98,7 @@ function formatGap(seconds: number): string {
   const abs = Math.abs(seconds)
   if (abs > 90) return seconds < 0 ? '-1 Lap' : '+1 Lap'
   const sign = seconds <= 0 ? '-' : '+'
-  return `${sign}${abs.toFixed(3)}`
+  return `${sign}${abs.toFixed(1)}`
 }
 
 export default function Relative() {
@@ -150,6 +150,7 @@ export default function Relative() {
           safetyRating: '? ?.??',
           carNumber:    '??',
           carName:      '',
+          isAI:         false,
         }
         const isPlayer = car.carIdx === playerCarIdx
         return {
