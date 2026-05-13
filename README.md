@@ -4,6 +4,8 @@ A lightweight, customizable iRacing HUD overlay for Windows. Transparent overlay
 
 ## Overlays
 
+> `†` = not available on all cars; RaceLayer auto-hides these when the current car doesn't support them.
+
 ### Relative
 Proximity list centered on your car — shows drivers ahead and behind with configurable columns.
 
@@ -22,7 +24,8 @@ A full-width instrument bar across the bottom of your screen.
 - Speed (MPH)
 - Lap delta to personal best
 - Fuel level
-- Traction Control and ABS indicators — show current dial level and flash when actively intervening (auto-hidden on cars that don't support these aids)
+- Traction Control indicator `†` — shows dial level and flashes when actively intervening
+- ABS indicator `†` — shows dial level and flashes when actively intervening
 
 ### Pit Strategy
 Fuel and tire data to help plan your pit stop.
@@ -32,14 +35,14 @@ Fuel and tire data to help plan your pit stop.
 - Lap-time history for the current stint with per-lap degradation
 - Estimated "pit by lap" based on fuel window
 
-### Tire Temps
-Four-corner tire temperature display with color-coded heat mapping — cold to hot across each tire's inner, middle, and outer zones.
+### Tire Temps `†`
+Four-corner tire temperature display with color-coded heat mapping — cold to hot across each tire's inner, middle, and outer zones. Shows live surface temps when available, falls back to carcass temps otherwise.
 
 ## Features
 
 - **Launch on startup** — optional Windows login item so RaceLayer is waiting in the tray whenever you sit down to race; toggle in Settings
 - **Per-session-type visibility** — configure each overlay and element independently for practice, qualifying, and race sessions
-- **Auto-hide unsupported elements** — overlays and indicators that require car-specific data (surface tire temps, TC, ABS) are automatically hidden when the current car doesn't expose them
+- **Auto-hide unsupported elements** — items marked `†` are automatically hidden when the current car doesn't support them; no manual configuration needed
 - **Safety rating badges** — Safety Rating column shows a color-coded letter+icon badge (red/yellow/green/blue) based on sub-rating value for instant at-a-glance reads
 - **Draggable layout mode** — press a shortcut to unlock all overlays for repositioning; positions are saved per monitor configuration
 - **Dev mode** — preview overlays with simulated data without iRacing running
