@@ -1,5 +1,7 @@
 # RaceLayer — CLAUDE.md
 
+> **Documentation rule:** Whenever code changes are made in this repo — new features, bug fixes, config additions, SDK variable discoveries — update this file and `README.md` in the same commit. The goal is for `CLAUDE.md` to always reflect the actual state of the codebase so future sessions can onboard instantly without re-deriving context from reading source files.
+
 ## What This Is
 
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
