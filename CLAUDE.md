@@ -129,6 +129,14 @@ type SessionFlags = Record<SType, boolean>  // per-session-type toggle
 
 Every configurable element uses `SessionFlags` so each can be independently toggled per session type. New overlays added to the config must also add a branch in `mergeWithDefaults()` so saved configs from older versions get the new field's default value.
 
+**`GlobalConfig`** contains settings that apply across all overlays:
+```typescript
+interface GlobalConfig {
+  hideUnsupportedElements: boolean  // default: true
+}
+```
+When `hideUnsupportedElements` is true, overlays and elements that require car-specific capabilities (surface tire temps, TC, ABS) are automatically hidden when the current car doesn't expose those SDK variables. Each overlay is responsible for reading `config.global.hideUnsupportedElements` and gating itself.
+
 `OverlayConfigContext.tsx` loads config on mount, exposes `{ config, update }`. Each overlay reads from `useOverlayConfig()`.
 
 **Important hook ordering:** All hooks (`useTelemetry`, `useOverlayConfig`, `useEditMode`, `useDrag`, `useMemo`, `useRef`, `useEffect`) must be called **before** any conditional `return null` — enforce Rules of Hooks. Use `visibility: hidden` instead of conditional rendering for optional grid columns to keep CSS grid layout stable.
@@ -147,6 +155,15 @@ Custom drag is implemented without `frame: true` drag — overlays use `setIgnor
 - `LFtempCL/CM/CR` — carcass (internal, slow-changing, always present)
 - `LFtempL/M/R` — surface (live, only present in some cars/configs)
 - At connect time, `tireTempMode` is set to `'surface'` or `'carcass'` based on whether `LFtempL` exists in `varMap`
+- `hasSurfaceTireTemps` capability flag is also set at this point and drives auto-hide in the TireTemps overlay
+
+**Car capabilities** are detected once per connection in `buildVarMap()` and stored in a module-level `carCapabilities` variable:
+```typescript
+hasSurfaceTireTemps: 'LFtempL' in varMap,
+hasTractionControl:  'dcTractionControl' in varMap,
+hasABS:              'dcABS' in varMap,
+```
+Capabilities are reset to `false` in `closeMemory()`. The renderer receives them as part of every `IRacingTelemetry` payload.
 
 **CarIdxTrackSurface enum** (irsdk_TrkLoc):
 - `-1` = NotInWorld (skip these cars)
@@ -157,19 +174,45 @@ Custom drag is implemented without `frame: true` drag — overlays use `setIgnor
 
 **Position in practice:** `CarIdxPosition` returns `0` in practice sessions (no race classification). Show `--` instead of `P0`.
 
-**f2Time:** `CarIdxF2Time` — seconds relative to player. Negative = car is ahead of player. Used for relative gap display.
+**f2Time:** `CarIdxF2Time` — seconds relative to player. Negative = car is ahead of player. **Unreliable in practice sessions** (returns 0 for cars without a set lap time). The Relative overlay replaces it with a `lapDistPct`-based calculation:
+```typescript
+function computeRelativeGap(car, playerLapDistPct, playerLap, referenceLapTime) {
+  const diff = (car.lap + car.lapDistPct) - (playerLap + playerLapDistPct)
+  const wrapped = diff - Math.round(diff)  // wraps to [-0.5, 0.5] shortest path
+  return -wrapped * referenceLapTime
+}
+```
+`referenceLapTime` is derived from the best lap of any car that has completed at least one lap, falling back to the SDK's `sessionTimeRemain / (totalLaps - currentLap)` estimate.
+
+**AI drivers:** `CarIsAI: 1` in session YAML for all AI-controlled cars. Do **not** filter them out of the driver list — they have valid names, car numbers, and all their telemetry is meaningful. Only filter pace cars (`CarIsPaceCar: 1`).
+
+**TC / ABS SDK variables:**
+- `dcTractionControl` — float, current dial level (0 = off)
+- `TractionControlActive` — bool, system currently intervening
+- `dcABS` — float, current ABS dial level (0 = off)
+- `BrakeABSactive` — bool, ABS currently intervening
 
 **Fuel calc:** Don't use `fuelUsePerHour` for laps-remaining at rest (shows ~2 L/hr at idle = 1,300+ laps). Instead, measure actual fuel delta at lap boundaries (rolling 5-lap average). Fall back to `fuelUsePerHour` only when `> 5 L/hr` (engine actually under load).
 
 ## Overlay Details
 
 ### Gauges (`/gauges`, 860×180)
-RPM bar, throttle/brake input trace, gear indicator, speed, lap delta to best, fuel level. Each element independently configurable per session type.
+RPM bar, throttle/brake input trace, gear indicator, speed, lap delta to best, fuel level, TC and ABS indicators. Each element independently configurable per session type.
+
+TC/ABS are rendered via the `AidBlock` component which accepts a single `activeColor` hex string and derives rgba tints at render time (border at 0.75 opacity, background at 0.10 opacity). TC uses amber (`#fbbf24`), ABS uses purple (`#a78bfa`). Both auto-hide when `config.global.hideUnsupportedElements` is true and the car lacks the corresponding capability.
 
 ### Relative (`/relative`, 400×520)
-Shows cars within ±5 positions of player sorted by `f2Time`. 8-column grid:
+Shows cars within ±5 positions of player sorted by computed gap (not `f2Time` — see SDK Notes). 8-column grid:
 `34px 28px 30px 1fr 48px 44px 54px 62px`
 Columns: Position | Pos-Δ | Car# | Name | iRating | Safety Rating | Est. iR Δ | Gap
+
+Gap is shown to tenths of a second (e.g. `+1.3`). Lapped cars show `+N Lap` / `-N Lap`.
+
+Safety Rating is rendered by the `SafetyBadge` component as a letter + symbol badge, color-coded by sub-rating value:
+- `≤ 2.0` → red (`#f87171`) + `!`
+- `≤ 3.0` → amber (`#fbbf24`) + `▲`
+- `≤ 4.0` → green (`#4ade80`) + `★`
+- `> 4.0` → blue (`#38bdf8`) + `✦`
 
 Est. iR Δ uses an Elo-style formula:
 ```
@@ -220,3 +263,7 @@ Icon files live in `resources/` (generated by `scripts/generate-icons.mjs` using
 - **`tireTempMode`** is module-level state in `iracingSdk.ts` — reset to `'carcass'` in `closeMemory()`
 - **Radar overlay** is intentionally excluded from the `OVERLAYS` array in `main/index.ts` and from the Settings config table — its window definition is commented out with an explanatory note
 - **`computeIRChanges`** returns an empty Map (not zeros) when fewer than 2 rated cars exist — callers should use `?? null` when reading from it
+- **`CarIdxF2Time` is unreliable in practice** — returns 0 for any car that hasn't set a lap time yet. Use the `lapDistPct`-based `computeRelativeGap()` function instead (see SDK Notes)
+- **AI driver filter** — do not filter on `CarIsAI` when building the driver list. AI cars have valid names and telemetry. Only filter `CarIsPaceCar`
+- **`carCapabilities` is module-level state** in `iracingSdk.ts` — reset to all-false in `closeMemory()`, same as `tireTempMode`
+- **`mergeWithDefaults` must be kept in sync** — every new field added to `OverlayConfig` or any nested interface needs a corresponding merge branch, otherwise stored configs from older builds will silently drop the new field's default

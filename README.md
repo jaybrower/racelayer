@@ -22,6 +22,7 @@ A full-width instrument bar across the bottom of your screen.
 - Speed (MPH)
 - Lap delta to personal best
 - Fuel level
+- Traction Control and ABS indicators — show current dial level and flash when actively intervening (auto-hidden on cars that don't support these aids)
 
 ### Pit Strategy
 Fuel and tire data to help plan your pit stop.
@@ -37,6 +38,8 @@ Four-corner tire temperature display with color-coded heat mapping — cold to h
 ## Features
 
 - **Per-session-type visibility** — configure each overlay and element independently for practice, qualifying, and race sessions
+- **Auto-hide unsupported elements** — overlays and indicators that require car-specific data (surface tire temps, TC, ABS) are automatically hidden when the current car doesn't expose them
+- **Safety rating badges** — Safety Rating column shows a color-coded letter+icon badge (red/yellow/green/blue) based on sub-rating value for instant at-a-glance reads
 - **Draggable layout mode** — press a shortcut to unlock all overlays for repositioning; positions are saved per monitor configuration
 - **Dev mode** — preview overlays with simulated data without iRacing running
 - **Configurable shortcuts** — remap the layout-mode and settings shortcuts to whatever key combo you want
