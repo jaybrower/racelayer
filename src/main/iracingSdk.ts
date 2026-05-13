@@ -78,6 +78,11 @@ let cachedPlayerCarIdx = 0
 let cachedRedLine = 0  // RPM, from DriverInfo.DriverCarRedLine in session YAML
 const startPositions = new Map<number, number>() // carIdx → grid position (race only)
 
+// Which tire-temp variables this SDK build exposes.
+// 'surface' = LFtempL/M/R  (live contact-patch, fast-changing)
+// 'carcass' = LFtempCL/CM/CR (internal structure, slow-changing)
+let tireTempMode: 'surface' | 'carcass' = 'carcass'
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /** Load koffi and bind Win32 API. Returns false if koffi is not installed. */
@@ -156,6 +161,7 @@ function closeMemory(): void {
   lastSessionInfoVer = -1
   cachedRedLine = 0
   cachedMemType = null  // re-probe size on next connect
+  tireTempMode = 'carcass'
 }
 
 function readFullBuffer(): Buffer | null {
@@ -212,7 +218,10 @@ function buildVarMap(buf: Buffer): void {
     const name = buf.subarray(nameStart, nameEnd).toString('ascii')
     if (name) varMap.set(name, { type, offset, count })
   }
-  console.log(`[irsdk] built var map — ${varMap.size} variables`)
+  // Prefer live surface temps (LFtempL/M/R) if exposed by this SDK build;
+  // fall back to slow carcass temps (LFtempCL/CM/CR).
+  tireTempMode = varMap.has('LFtempL') ? 'surface' : 'carcass'
+  console.log(`[irsdk] built var map — ${varMap.size} variables, tire temps: ${tireTempMode}`)
 }
 
 function parseSessionYaml(buf: Buffer): void {
@@ -339,9 +348,12 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
   const cars: CarTelemetry[] = []
   for (let idx = 0; idx < MAX_CARS; idx++) {
     const pos = positions[idx]
-    const onTrack = surfaces[idx] === 4
-    const inPit   = surfaces[idx] === 2 || surfaces[idx] === 3
-    if (pos === 0 && !onTrack && !inPit) continue  // car not in world
+    const surf = surfaces[idx]
+    // irsdk_TrkLoc enum: -1=NotInWorld, 0=OffTrack, 1=InPitStall, 2=AproachingPits, 3=OnTrack
+    if (surf === -1) continue                    // not spawned into the world
+    const onTrack = surf === 3
+    const inPit   = surf === 1 || surf === 2
+    if (pos === 0 && !onTrack && !inPit) continue  // off-track, unpositioned — skip
     cars.push({
       carIdx:        idx,
       position:      pos,
@@ -379,12 +391,21 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
                           ? rf(buf, D, 'LapDeltaToBestLap')
                           : NaN,
     lapDistPct:         rf(buf, D, 'LapDistPct'),
-    // Contact-patch surface temps °C — Left / Middle / Right zone per corner.
-    // iRacing SDK names: {corner}tempCL / CM / CR  (C = Contact zone).
-    tireLF: [rf(buf, D, 'LFtempCL'), rf(buf, D, 'LFtempCM'), rf(buf, D, 'LFtempCR')] as const,
-    tireRF: [rf(buf, D, 'RFtempCL'), rf(buf, D, 'RFtempCM'), rf(buf, D, 'RFtempCR')] as const,
-    tireLR: [rf(buf, D, 'LRtempCL'), rf(buf, D, 'LRtempCM'), rf(buf, D, 'LRtempCR')] as const,
-    tireRR: [rf(buf, D, 'RRtempCL'), rf(buf, D, 'RRtempCM'), rf(buf, D, 'RRtempCR')] as const,
+    // Tire temps °C — inner/middle/outer zone per corner.
+    // Surface temps (LFtempL/M/R) update live each tick — preferred when available.
+    // Carcass temps (LFtempCL/CM/CR) update slowly (internal heat) — fallback.
+    // tireTempMode is detected once per connection in buildVarMap.
+    ...(tireTempMode === 'surface' ? {
+      tireLF: [rf(buf, D, 'LFtempL'), rf(buf, D, 'LFtempM'), rf(buf, D, 'LFtempR')] as const,
+      tireRF: [rf(buf, D, 'RFtempL'), rf(buf, D, 'RFtempM'), rf(buf, D, 'RFtempR')] as const,
+      tireLR: [rf(buf, D, 'LRtempL'), rf(buf, D, 'LRtempM'), rf(buf, D, 'LRtempR')] as const,
+      tireRR: [rf(buf, D, 'RRtempL'), rf(buf, D, 'RRtempM'), rf(buf, D, 'RRtempR')] as const,
+    } : {
+      tireLF: [rf(buf, D, 'LFtempCL'), rf(buf, D, 'LFtempCM'), rf(buf, D, 'LFtempCR')] as const,
+      tireRF: [rf(buf, D, 'RFtempCL'), rf(buf, D, 'RFtempCM'), rf(buf, D, 'RFtempCR')] as const,
+      tireLR: [rf(buf, D, 'LRtempCL'), rf(buf, D, 'LRtempCM'), rf(buf, D, 'LRtempCR')] as const,
+      tireRR: [rf(buf, D, 'RRtempCL'), rf(buf, D, 'RRtempCM'), rf(buf, D, 'RRtempCR')] as const,
+    }),
     carLeftRight: ri(buf, D, 'CarLeftRight'),
     cars,
     drivers: cachedDrivers,
