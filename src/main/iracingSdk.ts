@@ -1,0 +1,404 @@
+/**
+ * iRacing SDK reader — pure JS/FFI approach via koffi.
+ *
+ * iRacing exposes all telemetry through a Windows named memory-mapped file
+ * ("Local\IRSDKMemMapFileName"). We open it read-only with Win32 API calls,
+ * copy the whole block into a Buffer each tick, then extract values by their
+ * byte offsets as described in the iRacing SDK header (irsdk_defines.h).
+ *
+ * No native compilation needed — koffi ships prebuilt NAPI binaries.
+ */
+
+import yaml from 'js-yaml'
+import type { IRacingTelemetry, DriverInfo, CarTelemetry, SessionType } from './telemetry.js'
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const MEMMAPNAME = 'Local\\IRSDKMemMapFileName'
+const FILE_MAP_READ = 0x0004
+const IRSDK_STCONNECTED = 1      // status bit: iRacing is live
+const MAX_CARS = 64
+
+// irsdk variable types
+const VTYPE = { Char: 0, Bool: 1, Int: 2, BitField: 3, Float: 4, Double: 5 }
+
+// Byte offsets within irsdk_header (first ~112 bytes of the mapped file)
+const HDR = {
+  STATUS:           4,
+  SESSION_INFO_VER: 12,
+  SESSION_INFO_LEN: 16,
+  SESSION_INFO_OFF: 20,
+  NUM_VARS:         24,
+  VAR_HDR_OFFSET:   28,
+  BUF_LEN:          36,
+  VARBUF_START:     48,   // irsdk_varBuf[4] begins here
+}
+
+// irsdk_varBuf is 16 bytes each
+const VARBUF_TICKCOUNT = 0
+const VARBUF_OFFSET    = 4
+const VARBUF_STRIDE    = 16
+
+// irsdk_varHeader is 144 bytes each
+const VARHDR = { TYPE: 0, OFFSET: 4, COUNT: 8, NAME: 16 }
+const VARHDR_STRIDE = 144
+
+// ── Module-level state ───────────────────────────────────────────────────────
+
+interface VarInfo { type: number; offset: number; count: number }
+
+// Koffi function handles (set in tryInit)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let koffi: any = null
+// Koffi type for reading the shared-memory block.
+// Created dynamically on first connect (size read from header) and cached.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cachedMemType: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let fnOpenFileMapping: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let fnMapViewOfFile: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let fnUnmapViewOfFile: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let fnCloseHandle: any = null
+
+// Shared-memory handles
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let memHandle: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let memPtr: any = null
+
+// Parsed state — refreshed when iRacing session changes
+const varMap = new Map<string, VarInfo>()
+let lastSessionInfoVer = -1
+let sessionYamlTypes: Array<{ num: number; type: SessionType }> = []
+let cachedDrivers: DriverInfo[] = []
+let cachedPlayerCarIdx = 0
+let cachedRedLine = 0  // RPM, from DriverInfo.DriverCarRedLine in session YAML
+const startPositions = new Map<number, number>() // carIdx → grid position (race only)
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
+/** Load koffi and bind Win32 API. Returns false if koffi is not installed. */
+export async function tryInit(): Promise<boolean> {
+  try {
+    const mod = await import('koffi')
+    koffi = (mod as any).default ?? mod
+    const kernel32 = koffi.load('kernel32.dll')
+
+    fnOpenFileMapping = kernel32.func('void *OpenFileMappingA(uint32 dwDesiredAccess, int32 bInheritHandle, str lpName)')
+    fnMapViewOfFile   = kernel32.func('void *MapViewOfFile(void *hFileMappingObject, uint32 dwDesiredAccess, uint32 dwFileOffsetHigh, uint32 dwFileOffsetLow, int64 dwNumberOfBytesToMap)')
+    fnUnmapViewOfFile = kernel32.func('int32 UnmapViewOfFile(void *lpBaseAddress)')
+    fnCloseHandle     = kernel32.func('int32 CloseHandle(void *hObject)')
+
+    console.log('[irsdk] koffi loaded — will use real iRacing telemetry')
+    return true
+  } catch (e) {
+    console.log('[irsdk] koffi unavailable — falling back to mock data:', (e as Error).message)
+    return false
+  }
+}
+
+/**
+ * Read one frame of telemetry.
+ * Returns a disconnected frame if iRacing isn't running.
+ * Returns null only if koffi failed to load (caller should use mock instead).
+ */
+export function poll(): IRacingTelemetry {
+  if (!ensureConnected()) return { ...DISCONNECTED }
+
+  const buf = readFullBuffer()
+  if (!buf) { closeMemory(); return { ...DISCONNECTED } }
+
+  // Check iRacing live status bit
+  if (!(buf.readInt32LE(HDR.STATUS) & IRSDK_STCONNECTED)) {
+    closeMemory()
+    return { ...DISCONNECTED }
+  }
+
+  if (varMap.size === 0) buildVarMap(buf)
+
+  // Refresh session YAML when it changes (new session, driver joins, etc.)
+  const sessionInfoVer = buf.readInt32LE(HDR.SESSION_INFO_VER)
+  if (sessionInfoVer !== lastSessionInfoVer) {
+    lastSessionInfoVer = sessionInfoVer
+    parseSessionYaml(buf)
+  }
+
+  return extractTelemetry(buf)
+}
+
+export function cleanup(): void {
+  closeMemory()
+}
+
+// ── Private helpers ──────────────────────────────────────────────────────────
+
+function ensureConnected(): boolean {
+  if (memPtr) return true
+  try {
+    memHandle = fnOpenFileMapping(FILE_MAP_READ, 0, MEMMAPNAME)
+    if (!memHandle) return false
+    memPtr = fnMapViewOfFile(memHandle, FILE_MAP_READ, 0, 0, 0)
+    if (!memPtr) { fnCloseHandle(memHandle); memHandle = null; return false }
+    return true
+  } catch {
+    memHandle = null; memPtr = null
+    return false
+  }
+}
+
+function closeMemory(): void {
+  if (memPtr)    { try { fnUnmapViewOfFile(memPtr) } catch {} memPtr = null }
+  if (memHandle) { try { fnCloseHandle(memHandle)  } catch {} memHandle = null }
+  varMap.clear()
+  lastSessionInfoVer = -1
+  cachedRedLine = 0
+  cachedMemType = null  // re-probe size on next connect
+}
+
+function readFullBuffer(): Buffer | null {
+  try {
+    // Phase 1 (first connect): read just the 256-byte header to discover the
+    // exact layout of the shared memory.  The data buffers can live at offsets
+    // well beyond 780 KB on large sessions; we must not over-read or we get a
+    // native access violation (the OS only maps the file's actual size).
+    if (!cachedMemType) {
+      const SmallType = koffi.array('uint8', 256)
+      const smallBytes = koffi.decode(memPtr, SmallType) as Uint8Array
+      const hdr = Buffer.from(smallBytes)
+
+      // BUF_LEN (offset 36) = byte length of each rotating data buffer
+      const bufLen = hdr.readInt32LE(HDR.BUF_LEN)
+
+      // Each of the 4 irsdk_varBuf entries has its absolute file offset at +4
+      let maxOff = 0
+      for (let i = 0; i < 4; i++) {
+        const base = HDR.VARBUF_START + i * VARBUF_STRIDE
+        const off  = hdr.readInt32LE(base + VARBUF_OFFSET)
+        if (off > 0) maxOff = Math.max(maxOff, off)
+      }
+
+      // Guard against a corrupt/zeroed header on very first connection attempt
+      if (maxOff === 0 || bufLen <= 0) return null
+
+      const needed = maxOff + bufLen + 512   // tiny tail-padding for safety
+      cachedMemType = koffi.array('uint8', needed)
+      console.log(`[irsdk] shared-memory layout: ${(needed / 1024).toFixed(0)} KB ` +
+                  `(data buffers at +${maxOff}, each ${bufLen} B)`)
+    }
+
+    return Buffer.from(koffi.decode(memPtr, cachedMemType) as Uint8Array)
+  } catch {
+    cachedMemType = null   // reset so we re-probe on the next poll
+    return null
+  }
+}
+
+function buildVarMap(buf: Buffer): void {
+  varMap.clear()
+  const numVars  = buf.readInt32LE(HDR.NUM_VARS)
+  const hdrStart = buf.readInt32LE(HDR.VAR_HDR_OFFSET)
+  for (let i = 0; i < numVars; i++) {
+    const base  = hdrStart + i * VARHDR_STRIDE
+    const type  = buf.readInt32LE(base + VARHDR.TYPE)
+    const offset = buf.readInt32LE(base + VARHDR.OFFSET)
+    const count  = buf.readInt32LE(base + VARHDR.COUNT)
+    // Name is a null-terminated char[32]
+    const nameStart = base + VARHDR.NAME
+    const nullAt = buf.indexOf(0, nameStart)
+    const nameEnd = nullAt === -1 || nullAt > nameStart + 32 ? nameStart + 32 : nullAt
+    const name = buf.subarray(nameStart, nameEnd).toString('ascii')
+    if (name) varMap.set(name, { type, offset, count })
+  }
+  console.log(`[irsdk] built var map — ${varMap.size} variables`)
+}
+
+function parseSessionYaml(buf: Buffer): void {
+  const off = buf.readInt32LE(HDR.SESSION_INFO_OFF)
+  const len = buf.readInt32LE(HDR.SESSION_INFO_LEN)
+  const raw = buf.subarray(off, off + len).toString('utf-8').replace(/\0.*$/s, '')
+  try {
+    const doc = yaml.load(raw) as Record<string, unknown>
+    if (!doc) return
+
+    cachedPlayerCarIdx = (doc?.DriverInfo as any)?.DriverCarIdx ?? 0
+    cachedRedLine      = Number((doc?.DriverInfo as any)?.DriverCarRedLine ?? 0)
+
+    // All sessions in this event (we pick by live SessionNum)
+    const sessions: unknown[] = (doc?.SessionInfo as any)?.Sessions ?? []
+    sessionYamlTypes = sessions.map((s: any) => ({
+      num:  Number(s.SessionNum ?? -1),
+      type: mapSessionType(String(s.SessionType ?? '')),
+    }))
+
+    // Driver list — exclude pace cars and AI
+    const drivers: unknown[] = (doc?.DriverInfo as any)?.Drivers ?? []
+    cachedDrivers = (drivers as any[])
+      .filter((d) => !d.CarIsAI && !d.CarIsPaceCar)
+      .map((d) => ({
+        carIdx:       Number(d.CarIdx ?? 0),
+        userName:     String(d.UserName ?? ''),
+        iRating:      Number(d.IRating ?? 0),
+        safetyRating: String(d.LicString ?? ''),
+        carNumber:    String(d.CarNumber ?? ''),
+        carName:      String(d.CarPath ?? ''),
+      } satisfies DriverInfo))
+
+    console.log(`[irsdk] session YAML refreshed — ${cachedDrivers.length} drivers, player car ${cachedPlayerCarIdx}`)
+  } catch (e) {
+    console.warn('[irsdk] YAML parse error:', e)
+  }
+}
+
+function mapSessionType(raw: string): SessionType {
+  const s = raw.toLowerCase()
+  if (s.includes('practice') || s.includes('test')) return 'practice'
+  if (s.includes('qual')) return 'qualifying'
+  if (s.includes('race') || s.includes('time trial')) return 'race'
+  return 'unknown'
+}
+
+/** Offset of the most recently completed data buffer within the mapped file. */
+function latestDataOffset(buf: Buffer): number {
+  let bestTick = -1
+  let bestOff  = 0
+  for (let i = 0; i < 4; i++) {
+    const base = HDR.VARBUF_START + i * VARBUF_STRIDE
+    if (base + 8 > buf.length) continue
+    const tick = buf.readInt32LE(base + VARBUF_TICKCOUNT)
+    const off  = buf.readInt32LE(base + VARBUF_OFFSET)
+    // Only accept a buffer offset that actually fits inside what we mapped
+    if (tick > bestTick && off > 0 && off < buf.length) {
+      bestTick = tick
+      bestOff  = off
+    }
+  }
+  return bestOff
+}
+
+// Typed read helpers — return 0/false if the variable isn't in the var map or offset is out of range
+function rf(buf: Buffer, base: number, name: string): number {
+  const v = varMap.get(name); if (!v) return 0
+  const off = base + v.offset; return off + 4 <= buf.length ? buf.readFloatLE(off) : 0
+}
+function rd(buf: Buffer, base: number, name: string): number {
+  const v = varMap.get(name); if (!v) return 0
+  const off = base + v.offset; return off + 8 <= buf.length ? buf.readDoubleLE(off) : 0
+}
+function ri(buf: Buffer, base: number, name: string): number {
+  const v = varMap.get(name); if (!v) return 0
+  const off = base + v.offset; return off + 4 <= buf.length ? buf.readInt32LE(off) : 0
+}
+/** irsdk_bool is 1 byte — do NOT use readInt32LE for bool variables */
+function rb(buf: Buffer, base: number, name: string): boolean {
+  const v = varMap.get(name); if (!v) return false
+  const off = base + v.offset; return off < buf.length ? buf.readUInt8(off) !== 0 : false
+}
+function rfArr(buf: Buffer, base: number, name: string, len: number): number[] {
+  const v = varMap.get(name)
+  if (!v) return Array(len).fill(0)
+  return Array.from({ length: len }, (_, i) => {
+    const off = base + v.offset + i * 4
+    return off + 4 <= buf.length ? buf.readFloatLE(off) : 0
+  })
+}
+function riArr(buf: Buffer, base: number, name: string, len: number): number[] {
+  const v = varMap.get(name)
+  if (!v) return Array(len).fill(0)
+  return Array.from({ length: len }, (_, i) => {
+    const off = base + v.offset + i * 4
+    return off + 4 <= buf.length ? buf.readInt32LE(off) : 0
+  })
+}
+
+function extractTelemetry(buf: Buffer): IRacingTelemetry {
+  const D = latestDataOffset(buf)  // base offset for this tick's data buffer
+
+  const sessionNum   = ri(buf, D, 'SessionNum')
+  const sessionState = ri(buf, D, 'SessionState') // 4 = actively racing
+
+  const sessionEntry = sessionYamlTypes.find(s => s.num === sessionNum)
+  const sessionType: SessionType = sessionEntry?.type ?? 'unknown'
+
+  const positions    = riArr(buf, D, 'CarIdxPosition',    MAX_CARS)
+  const lapDistPcts  = rfArr(buf, D, 'CarIdxLapDistPct',  MAX_CARS)
+  const surfaces     = riArr(buf, D, 'CarIdxTrackSurface',MAX_CARS)
+  const carLaps      = riArr(buf, D, 'CarIdxLap',         MAX_CARS)
+  const f2Times      = rfArr(buf, D, 'CarIdxF2Time',      MAX_CARS)
+  const lastLaps     = rfArr(buf, D, 'CarIdxLastLapTime', MAX_CARS)
+  const bestLaps     = rfArr(buf, D, 'CarIdxBestLapTime', MAX_CARS)
+
+  // Capture grid positions once at race start (sessionState 4 = racing, lap 0)
+  if (sessionType === 'race' && sessionState === 4 && !startPositions.size) {
+    positions.forEach((pos, idx) => { if (pos > 0) startPositions.set(idx, pos) })
+  }
+  if (sessionType !== 'race') startPositions.clear()
+
+  const cars: CarTelemetry[] = []
+  for (let idx = 0; idx < MAX_CARS; idx++) {
+    const pos = positions[idx]
+    const onTrack = surfaces[idx] === 4
+    const inPit   = surfaces[idx] === 2 || surfaces[idx] === 3
+    if (pos === 0 && !onTrack && !inPit) continue  // car not in world
+    cars.push({
+      carIdx:        idx,
+      position:      pos,
+      lapDistPct:    lapDistPcts[idx],
+      lap:           carLaps[idx],
+      onTrack,
+      inPit,
+      lastLapTime:   lastLaps[idx],
+      bestLapTime:   bestLaps[idx],
+      f2Time:        f2Times[idx],
+      startPosition: startPositions.get(idx) ?? pos,
+    })
+  }
+
+  return {
+    connected:          true,
+    sessionType,
+    sessionTime:        rd(buf, D, 'SessionTime'),
+    sessionTimeRemain:  rd(buf, D, 'SessionTimeRemain'),
+    playerCarIdx:       cachedPlayerCarIdx,
+    playerCarRedLine:   cachedRedLine,
+    speed:              rf(buf, D, 'Speed'),
+    gear:               ri(buf, D, 'Gear'),
+    rpm:                rf(buf, D, 'RPM'),
+    throttle:           rf(buf, D, 'Throttle'),
+    brake:              rf(buf, D, 'Brake'),
+    fuelLevel:          rf(buf, D, 'FuelLevel'),
+    fuelUsePerHour:     rf(buf, D, 'FuelUsePerHour'),
+    lap:                ri(buf, D, 'Lap'),
+    lapCurrentLapTime:  rf(buf, D, 'LapCurrentLapTime'),
+    lapLastLapTime:     rf(buf, D, 'LapLastLapTime'),
+    lapBestLapTime:     rf(buf, D, 'LapBestLapTime'),
+    // Delta: only valid once a reference lap exists (irsdk_bool = 1 byte)
+    lapDeltaToBestLap:  rb(buf, D, 'LapDeltaToBestLap_OK')
+                          ? rf(buf, D, 'LapDeltaToBestLap')
+                          : NaN,
+    lapDistPct:         rf(buf, D, 'LapDistPct'),
+    // Surface temps °C — inner/middle/outer per corner.
+    // LFtempL/M/R = surface (live, hot); LFtempCL/CM/CR = carcass (slow-moving internal).
+    tireLF: [rf(buf, D, 'LFtempL'), rf(buf, D, 'LFtempM'), rf(buf, D, 'LFtempR')] as const,
+    tireRF: [rf(buf, D, 'RFtempL'), rf(buf, D, 'RFtempM'), rf(buf, D, 'RFtempR')] as const,
+    tireLR: [rf(buf, D, 'LRtempL'), rf(buf, D, 'LRtempM'), rf(buf, D, 'LRtempR')] as const,
+    tireRR: [rf(buf, D, 'RRtempL'), rf(buf, D, 'RRtempM'), rf(buf, D, 'RRtempR')] as const,
+    carLeftRight: ri(buf, D, 'CarLeftRight'),
+    cars,
+    drivers: cachedDrivers,
+  }
+}
+
+const DISCONNECTED: IRacingTelemetry = {
+  connected: false, sessionType: 'unknown',
+  sessionTime: 0, sessionTimeRemain: 0, playerCarIdx: 0, playerCarRedLine: 0,
+  speed: 0, gear: 0, rpm: 0, throttle: 0, brake: 0,
+  fuelLevel: 0, fuelUsePerHour: 0,
+  lap: 0, lapCurrentLapTime: 0, lapLastLapTime: 0, lapBestLapTime: 0,
+  lapDeltaToBestLap: NaN, lapDistPct: 0,
+  tireLF: [0, 0, 0], tireRF: [0, 0, 0], tireLR: [0, 0, 0], tireRR: [0, 0, 0],
+  carLeftRight: 0,
+  cars: [], drivers: [],
+}

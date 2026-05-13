@@ -1,0 +1,20 @@
+{
+  "practice": {
+    "enabled": true,
+    "showFuelCalc": true,
+    "showTireDeg": true,
+    "lapHistoryCount": 5
+  },
+  "qualifying": {
+    "enabled": false,
+    "showFuelCalc": false,
+    "showTireDeg": false,
+    "lapHistoryCount": 3
+  },
+  "race": {
+    "enabled": true,
+    "showFuelCalc": true,
+    "showTireDeg": true,
+    "lapHistoryCount": 8
+  }
+}

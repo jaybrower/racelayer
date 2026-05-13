@@ -1,0 +1,26 @@
+{
+  "practice": {
+    "enabled": true,
+    "carsAbove": 5,
+    "carsBelow": 5,
+    "showIRating": true,
+    "showSafetyRating": true,
+    "showPositionChange": false
+  },
+  "qualifying": {
+    "enabled": true,
+    "carsAbove": 3,
+    "carsBelow": 3,
+    "showIRating": true,
+    "showSafetyRating": false,
+    "showPositionChange": false
+  },
+  "race": {
+    "enabled": true,
+    "carsAbove": 5,
+    "carsBelow": 5,
+    "showIRating": false,
+    "showSafetyRating": true,
+    "showPositionChange": true
+  }
+}

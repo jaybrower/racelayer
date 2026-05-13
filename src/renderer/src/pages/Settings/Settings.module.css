@@ -1,0 +1,521 @@
+.page {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: system-ui, -apple-system, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.headerIcon {
+  font-size: 20px;
+}
+
+.headerTitle {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f1f5f9;
+}
+
+.headerSub {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 1px;
+}
+
+.body {
+  flex: 1;
+  min-height: 0; /* allows flex child to shrink and actually scroll */
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0; /* prevent sections from compressing instead of scrolling */
+}
+
+.sectionHeader {
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sectionTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.sectionBody {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Toggle row */
+.toggleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.toggleInfo {
+  flex: 1;
+}
+
+.toggleLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 3px;
+}
+
+.toggleDesc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* Toggle switch */
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggleTrack {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.toggle input:checked + .toggleTrack {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #475569;
+  transition: transform 0.2s, background 0.2s;
+  pointer-events: none;
+}
+
+.toggle input:checked ~ .toggleThumb {
+  transform: translateX(20px);
+  background: #fff;
+}
+
+/* Session type selector */
+.sessionTypeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sessionTypeLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.radioGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.radioBtn {
+  flex: 1;
+  position: relative;
+}
+
+.radioBtn input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.radioBtnLabel {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.radioBtn input:checked + .radioBtnLabel {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.radioBtn input:not(:disabled) + .radioBtnLabel:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+}
+
+.radioBtn input:checked:not(:disabled) + .radioBtnLabel:hover {
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
+.radioBtn input:disabled + .radioBtnLabel {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Status badge */
+.devBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.devBadgeOn {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+}
+
+.devBadgeOff {
+  background: rgba(100, 116, 139, 0.1);
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  color: #475569;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dotOn {
+  background: #3b82f6;
+  box-shadow: 0 0 6px #3b82f6;
+  animation: pulse 1.5s infinite;
+}
+
+.dotOff {
+  background: #475569;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Shortcut rows */
+.shortcutRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shortcutRowMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shortcutLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #cbd5e1;
+  flex: 1;
+}
+
+.shortcutSub {
+  font-size: 11px;
+  color: #475569;
+  margin-top: -2px;
+}
+
+.shortcutDisplay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.shortcutEdit {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  color: #64748b;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.shortcutEdit:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+}
+
+.shortcutRecorder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.shortcutCapture {
+  min-width: 160px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.08);
+  color: #93c5fd;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: text;
+  outline: none;
+  animation: borderPulse 1.2s infinite;
+}
+
+.shortcutCapture:focus {
+  border-color: #3b82f6;
+}
+
+@keyframes borderPulse {
+  0%, 100% { border-color: rgba(59, 130, 246, 0.5); }
+  50% { border-color: rgba(59, 130, 246, 1); }
+}
+
+.shortcutCaptureEmpty {
+  color: #475569;
+  font-family: system-ui, sans-serif;
+  font-style: italic;
+}
+
+.shortcutIconBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.shortcutIconBtn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+}
+
+.shortcutIconBtn.confirm:hover:not(:disabled) {
+  border-color: #22c55e;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.shortcutIconBtn.cancel:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.shortcutIconBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.shortcutError {
+  font-size: 11px;
+  color: #f87171;
+}
+
+.shortcutDivider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 4px 0;
+}
+
+/* Shortcut hint */
+.footer {
+  padding: 12px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hint {
+  font-size: 11px;
+  color: #334155;
+}
+
+.kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: monospace;
+  color: #64748b;
+}
+
+/* ── Positions reset ────────────────────────────────────────────────────── */
+.positionsResetRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.resetBtn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.resetBtn:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+/* ── Overlay config table ────────────────────────────────────────────────── */
+.cfgTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.cfgHead {
+  text-align: left;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #334155;
+  text-transform: uppercase;
+  padding-bottom: 6px;
+}
+
+.cfgHeadCell {
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #475569;
+  text-transform: uppercase;
+  padding-bottom: 6px;
+  min-width: 72px;
+}
+
+.cfgRow td {
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.cfgRowIndent .cfgLabel {
+  padding-left: 14px;
+}
+
+.cfgRowDisabled {
+  opacity: 0.35;
+}
+
+.cfgLabel {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 500;
+  padding-right: 12px;
+}
+
+.cfgArrow {
+  color: #334155;
+  margin-right: 6px;
+  font-size: 10px;
+}
+
+.cfgCell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.cfgSpacer {
+  height: 6px;
+}
+
+.cfgCheck {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}

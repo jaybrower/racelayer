@@ -1,0 +1,35 @@
+{
+  "practice": {
+    "enabled": true,
+    "showSpeed": true,
+    "showGear": true,
+    "showRpm": true,
+    "showDelta": true,
+    "showFuel": true,
+    "showInputs": true,
+    "showTcAbs": true,
+    "speedUnit": "mph"
+  },
+  "qualifying": {
+    "enabled": true,
+    "showSpeed": true,
+    "showGear": true,
+    "showRpm": true,
+    "showDelta": true,
+    "showFuel": false,
+    "showInputs": true,
+    "showTcAbs": true,
+    "speedUnit": "mph"
+  },
+  "race": {
+    "enabled": true,
+    "showSpeed": true,
+    "showGear": true,
+    "showRpm": true,
+    "showDelta": false,
+    "showFuel": true,
+    "showInputs": false,
+    "showTcAbs": true,
+    "speedUnit": "mph"
+  }
+}

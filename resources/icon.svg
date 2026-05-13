@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Dark navy rounded square background -->
+  <rect width="256" height="256" rx="48" fill="#0f172a"/>
+
+  <!-- Three speed-stripe bars: ascending width = motion / acceleration layers -->
+  <rect x="36" y="76"  width="96"  height="26" rx="13" fill="#93c5fd"/>
+  <rect x="36" y="115" width="148" height="26" rx="13" fill="#60a5fa"/>
+  <rect x="36" y="154" width="184" height="26" rx="13" fill="#3b82f6"/>
+</svg>
