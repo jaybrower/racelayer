@@ -131,10 +131,10 @@
 }
 
 .safety {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
   text-align: right;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
 }
 
 .irChange {

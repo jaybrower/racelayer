@@ -94,6 +94,41 @@ function computeIRChanges(
   return result
 }
 
+/**
+ * iRacing license class colors — matches the badge colors shown in the iRacing UI.
+ * Safety rating string format: "[Class] [sub-level]", e.g. "A 4.32" or "B 2.17".
+ */
+const LICENSE_COLOR: Record<string, string> = {
+  R:  '#c84b4b',  // Rookie — red
+  D:  '#e07c3a',  // D — orange
+  C:  '#c8b428',  // C — yellow
+  B:  '#4caf50',  // B — green
+  A:  '#3ea8e0',  // A — blue
+  P:  '#a78bfa',  // Pro
+  WC: '#a78bfa',  // World Class
+}
+
+/**
+ * Render a compact safety-rating badge: class letter + tier icon.
+ *
+ * Sub-level tiers:
+ *   ≤ 2.0  →  !  (danger / probation risk)
+ *   ≤ 3.0  →  ▲  (caution)
+ *   ≤ 4.0  →  ★  (solid)
+ *   > 4.0  →  ✦  (excellent)
+ *
+ * Example output: "A✦" in blue, "B★" in green, "D!" in orange.
+ */
+function SafetyBadge({ rating }: { rating: string }) {
+  const m = rating.match(/^([A-Z]+)\s+([\d.]+)$/)
+  if (!m) return null
+  const cls = m[1]
+  const sub = parseFloat(m[2])
+  const color = LICENSE_COLOR[cls] ?? '#94a3b8'
+  const icon  = sub <= 2.0 ? '!' : sub <= 3.0 ? '▲' : sub <= 4.0 ? '★' : '✦'
+  return <span style={{ color }}>{cls}{icon}</span>
+}
+
 function formatGap(seconds: number): string {
   const abs = Math.abs(seconds)
   if (abs > 90) return seconds < 0 ? '-1 Lap' : '+1 Lap'
@@ -277,7 +312,7 @@ function DriverRow({
       </span>
 
       <span className={styles.safety} style={{ visibility: cfg.showSR ? 'visible' : 'hidden' }}>
-        {driver.safetyRating !== '? ?.??' ? driver.safetyRating : ''}
+        <SafetyBadge rating={driver.safetyRating} />
       </span>
 
       <span
