@@ -379,12 +379,12 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
                           ? rf(buf, D, 'LapDeltaToBestLap')
                           : NaN,
     lapDistPct:         rf(buf, D, 'LapDistPct'),
-    // Surface temps °C — inner/middle/outer per corner.
-    // LFtempL/M/R = surface (live, hot); LFtempCL/CM/CR = carcass (slow-moving internal).
-    tireLF: [rf(buf, D, 'LFtempL'), rf(buf, D, 'LFtempM'), rf(buf, D, 'LFtempR')] as const,
-    tireRF: [rf(buf, D, 'RFtempL'), rf(buf, D, 'RFtempM'), rf(buf, D, 'RFtempR')] as const,
-    tireLR: [rf(buf, D, 'LRtempL'), rf(buf, D, 'LRtempM'), rf(buf, D, 'LRtempR')] as const,
-    tireRR: [rf(buf, D, 'RRtempL'), rf(buf, D, 'RRtempM'), rf(buf, D, 'RRtempR')] as const,
+    // Contact-patch surface temps °C — Left / Middle / Right zone per corner.
+    // iRacing SDK names: {corner}tempCL / CM / CR  (C = Contact zone).
+    tireLF: [rf(buf, D, 'LFtempCL'), rf(buf, D, 'LFtempCM'), rf(buf, D, 'LFtempCR')] as const,
+    tireRF: [rf(buf, D, 'RFtempCL'), rf(buf, D, 'RFtempCM'), rf(buf, D, 'RFtempCR')] as const,
+    tireLR: [rf(buf, D, 'LRtempCL'), rf(buf, D, 'LRtempCM'), rf(buf, D, 'LRtempCR')] as const,
+    tireRR: [rf(buf, D, 'RRtempCL'), rf(buf, D, 'RRtempCM'), rf(buf, D, 'RRtempCR')] as const,
     carLeftRight: ri(buf, D, 'CarLeftRight'),
     cars,
     drivers: cachedDrivers,

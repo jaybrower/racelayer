@@ -5,8 +5,10 @@ import { useDrag } from '../../hooks/useDrag'
 import type { SessionType } from '../../types/telemetry'
 import styles from './PitStrategy.module.css'
 
-const FUEL_PER_LAP_FALLBACK = 2.1 // liters — replaced by rolling average once data comes in
-const LAP_TIME_ESTIMATE = 92        // seconds — replaced by actual lap times
+const LAP_TIME_ESTIMATE = 92   // seconds — used only as last-resort estimate on lap 1
+// Minimum fuelUsePerHour (L/hr) to consider the car actually moving.
+// At idle the engine burns ~1–2 L/hr which would produce absurdly high laps-remaining.
+const MIN_DRIVING_FUEL_RATE = 5
 
 function formatTime(s: number): string {
   if (s <= 0) return '--:--.---'
@@ -33,14 +35,13 @@ const SHOWN_SESSIONS: SessionType[] = ['practice', 'race']
 export default function PitStrategy() {
   const t = useTelemetry()
 
-  // Track lap history in a ref so it persists across renders
+  // ── Lap-time history ─────────────────────────────────────────────────────────
   const lapHistoryRef = useRef<LapRecord[]>([])
   const lastTrackedLapRef = useRef<number>(0)
 
   useEffect(() => {
     if (!t.connected || t.lapLastLapTime <= 0) return
     if (t.lap <= 1) {
-      // Reset on new session / first lap
       lapHistoryRef.current = []
       lastTrackedLapRef.current = 0
     }
@@ -56,23 +57,72 @@ export default function PitStrategy() {
     }
   }, [t.lap, t.lapLastLapTime, t.connected])
 
+  // ── Per-lap fuel consumption (measured at lap boundaries) ────────────────────
+  const fuelAtLapStartRef = useRef<number>(-1)
+  const fuelPerLapSamplesRef = useRef<number[]>([])
+  const lastFuelLapRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (!t.connected || t.fuelLevel <= 0) return
+
+    if (t.lap <= 1) {
+      // Reset on new session
+      fuelAtLapStartRef.current = t.fuelLevel
+      fuelPerLapSamplesRef.current = []
+      lastFuelLapRef.current = 0
+      return
+    }
+
+    if (t.lap > lastFuelLapRef.current) {
+      // New lap crossed — record how much fuel was burned in the lap just completed
+      if (fuelAtLapStartRef.current > 0) {
+        const consumed = fuelAtLapStartRef.current - t.fuelLevel
+        // Sanity: skip if refuelled (negative) or implausibly large (>15 L)
+        if (consumed > 0.05 && consumed < 15) {
+          fuelPerLapSamplesRef.current.push(consumed)
+          if (fuelPerLapSamplesRef.current.length > 5) fuelPerLapSamplesRef.current.shift()
+        }
+      }
+      fuelAtLapStartRef.current = t.fuelLevel
+      lastFuelLapRef.current = t.lap
+    }
+  }, [t.lap, t.fuelLevel, t.connected])
+
+  // ── Derived stats ─────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const lapHistory = lapHistoryRef.current
-    const fuelPerLap = t.fuelUsePerHour > 0
-      ? t.fuelUsePerHour / (3600 / LAP_TIME_ESTIMATE)
-      : FUEL_PER_LAP_FALLBACK
-    const lapsOnFuel = fuelPerLap > 0 ? t.fuelLevel / fuelPerLap : 0
+    const samples = fuelPerLapSamplesRef.current
 
-    // Tire degradation: avg lap-time increase per lap over stint
+    // Priority:
+    //  1. Rolling average of measured per-lap fuel (most accurate)
+    //  2. Live fuelUsePerHour × actual lap time (reasonable while actively driving)
+    //  3. Show '--' — never show a nonsense number when idle/stopped
+    let fuelPerLap = 0
+    let hasReliableEstimate = false
+
+    if (samples.length > 0) {
+      fuelPerLap = samples.reduce((a, b) => a + b, 0) / samples.length
+      hasReliableEstimate = true
+    } else if (t.fuelUsePerHour > MIN_DRIVING_FUEL_RATE) {
+      // Only use live rate when the engine is actually under load
+      const lapTime = t.lapLastLapTime > 0 ? t.lapLastLapTime : LAP_TIME_ESTIMATE
+      fuelPerLap = t.fuelUsePerHour * (lapTime / 3600)
+      hasReliableEstimate = true
+    }
+
+    const lapsOnFuel = hasReliableEstimate && fuelPerLap > 0
+      ? t.fuelLevel / fuelPerLap
+      : 0
+
+    // Tire degradation: avg lap-time delta per lap over stint
     const degradation = lapHistory.length >= 2
       ? lapHistory[lapHistory.length - 1].diff / (lapHistory.length - 1)
       : null
 
-    // Rough pit window: pit when you'll run low on fuel or deg gets bad
     const pitLap = lapsOnFuel > 0 ? Math.floor(t.lap + lapsOnFuel - 0.5) : null
 
-    return { fuelPerLap, lapsOnFuel, degradation, pitLap, lapHistory }
-  }, [t.fuelLevel, t.fuelUsePerHour, t.lap])
+    return { fuelPerLap, lapsOnFuel, hasReliableEstimate, degradation, pitLap, lapHistory }
+  }, [t.fuelLevel, t.fuelUsePerHour, t.lap, t.lapLastLapTime])
 
   const editMode = useEditMode()
   const { onMouseDown, dragging } = useDrag(editMode)
@@ -121,8 +171,12 @@ export default function PitStrategy() {
           <span className={styles.statValue}>{t.fuelLevel.toFixed(1)} L</span>
         </div>
         <div className={styles.statRow}>
-          <span className={styles.statLabel}>Per lap (est.)</span>
-          <span className={styles.statValue}>{stats.fuelPerLap.toFixed(2)} L</span>
+          <span className={styles.statLabel}>
+            {fuelPerLapSamplesRef.current.length > 0 ? 'Per lap (avg)' : 'Per lap (est.)'}
+          </span>
+          <span className={styles.statValue}>
+            {stats.hasReliableEstimate ? `${stats.fuelPerLap.toFixed(2)} L` : '--'}
+          </span>
         </div>
         <div className={styles.statRow}>
           <span className={styles.statLabel}>Laps remaining</span>

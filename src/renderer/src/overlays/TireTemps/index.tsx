@@ -10,7 +10,7 @@ import styles from './TireTemps.module.css'
 /** Map a tyre temperature (°C) to a display colour.
  *  Thresholds tuned for GT3-class tyres (~75–100 °C optimal window). */
 function tempColor(c: number): string {
-  if (c <= 0)   return 'transparent'
+  if (c <= 0)   return '#1e293b'   // no data — dim slate (bar visible but clearly empty)
   if (c < 40)   return '#3b82f6'   // stone cold — deep blue
   if (c < 55)   return '#60a5fa'   // cold — light blue
   if (c < 70)   return '#34d399'   // coming up — teal-green
