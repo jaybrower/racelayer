@@ -17,16 +17,15 @@ function formatTime(s: number): string {
   return `${m}:${sec}`
 }
 
-function formatDiff(s: number): string {
-  if (s === 0) return 'baseline'
-  const sign = s > 0 ? '+' : '-'
-  return `${sign}${Math.abs(s).toFixed(3)}`
+function formatDelta(s: number): string {
+  if (s === 0) return 'BEST'
+  const sign = s > 0 ? '+' : ''
+  return `${sign}${s.toFixed(3)}`
 }
 
 interface LapRecord {
   lap: number
   time: number
-  diff: number  // vs. stint baseline
 }
 
 export default function PitStrategy() {
@@ -34,6 +33,8 @@ export default function PitStrategy() {
   const { config } = useOverlayConfig()
 
   // ── Lap-time history ─────────────────────────────────────────────────────────
+  // Stores every completed lap; diffs are always computed at render time against
+  // the current session best so they update live as the baseline improves.
   const lapHistoryRef = useRef<LapRecord[]>([])
   const lastTrackedLapRef = useRef<number>(0)
 
@@ -42,16 +43,13 @@ export default function PitStrategy() {
     if (t.lap <= 1) {
       lapHistoryRef.current = []
       lastTrackedLapRef.current = 0
+      return
     }
     if (t.lap > lastTrackedLapRef.current) {
       lastTrackedLapRef.current = t.lap
-      const baseline = lapHistoryRef.current[0]?.time ?? t.lapLastLapTime
-      lapHistoryRef.current.push({
-        lap: t.lap - 1,
-        time: t.lapLastLapTime,
-        diff: t.lapLastLapTime - baseline,
-      })
-      if (lapHistoryRef.current.length > 8) lapHistoryRef.current.shift()
+      lapHistoryRef.current.push({ lap: t.lap - 1, time: t.lapLastLapTime })
+      // Keep a full stint's worth; 30 laps is more than enough
+      if (lapHistoryRef.current.length > 30) lapHistoryRef.current.shift()
     }
   }, [t.lap, t.lapLastLapTime, t.connected])
 
@@ -64,7 +62,6 @@ export default function PitStrategy() {
     if (!t.connected || t.fuelLevel <= 0) return
 
     if (t.lap <= 1) {
-      // Reset on new session
       fuelAtLapStartRef.current = t.fuelLevel
       fuelPerLapSamplesRef.current = []
       lastFuelLapRef.current = 0
@@ -72,7 +69,6 @@ export default function PitStrategy() {
     }
 
     if (t.lap > lastFuelLapRef.current) {
-      // New lap crossed — record how much fuel was burned in the lap just completed
       if (fuelAtLapStartRef.current > 0) {
         const consumed = fuelAtLapStartRef.current - t.fuelLevel
         // Sanity: skip if refuelled (negative) or implausibly large (>15 L)
@@ -102,7 +98,6 @@ export default function PitStrategy() {
       fuelPerLap = samples.reduce((a, b) => a + b, 0) / samples.length
       hasReliableEstimate = true
     } else if (t.fuelUsePerHour > MIN_DRIVING_FUEL_RATE) {
-      // Only use live rate when the engine is actually under load
       const lapTime = t.lapLastLapTime > 0 ? t.lapLastLapTime : LAP_TIME_ESTIMATE
       fuelPerLap = t.fuelUsePerHour * (lapTime / 3600)
       hasReliableEstimate = true
@@ -112,14 +107,31 @@ export default function PitStrategy() {
       ? t.fuelLevel / fuelPerLap
       : 0
 
-    // Tire degradation: avg lap-time delta per lap over stint
-    const degradation = lapHistory.length >= 2
-      ? lapHistory[lapHistory.length - 1].diff / (lapHistory.length - 1)
-      : null
-
     const pitLap = lapsOnFuel > 0 ? Math.floor(t.lap + lapsOnFuel - 0.5) : null
 
-    return { fuelPerLap, lapsOnFuel, hasReliableEstimate, degradation, pitLap, lapHistory }
+    // ── Tire deg: session-best baseline + recent wear laps ──────────────────────
+    // Fastest lap of the session — this is the rolling baseline.
+    // It moves forward as the driver improves during warm-up, then locks in at peak.
+    const fastestLap = lapHistory.length > 0
+      ? lapHistory.reduce((best, r) => r.time < best.time ? r : best)
+      : null
+
+    // Up to 3 most recent laps that aren't the fastest lap.
+    // Excluding the best means this window shows actual wear laps, not the peak.
+    const recentLaps = fastestLap
+      ? lapHistory.filter(r => r !== fastestLap).slice(-3)
+      : []
+
+    // Average delta of those ≤3 laps vs the best — the headline tire wear number.
+    // Positive = slower than best = tires wearing. Grows as deg worsens.
+    const avgDelta = fastestLap && recentLaps.length > 0
+      ? recentLaps.reduce((sum, r) => sum + (r.time - fastestLap.time), 0) / recentLaps.length
+      : null
+
+    return {
+      fuelPerLap, lapsOnFuel, hasReliableEstimate, pitLap,
+      fastestLap, recentLaps, avgDelta,
+    }
   }, [t.fuelLevel, t.fuelUsePerHour, t.lap, t.lapLastLapTime])
 
   const editMode = useEditMode()
@@ -186,25 +198,53 @@ export default function PitStrategy() {
       )}
 
       {/* Tire degradation */}
-      {showTireDeg && stats.lapHistory.length > 0 && (
+      {showTireDeg && stats.fastestLap && (
         <div className={styles.section}>
-          <div className={styles.sectionTitle}>TIRE DEG — THIS STINT</div>
-          {stats.lapHistory.map((rec) => (
-            <div className={styles.lapRow} key={rec.lap}>
-              <span className={styles.lapNum}>L{rec.lap}</span>
-              <span className={styles.lapTime}>{formatTime(rec.time)}</span>
-              <span
-                className={styles.lapDiff}
-                style={{ color: rec.diff === 0 ? '#94a3b8' : rec.diff > 0 ? '#f87171' : '#4ade80' }}
-              >
-                {formatDiff(rec.diff)}
-              </span>
+          <div className={styles.sectionTitle}>TIRE DEG</div>
+
+          {/* Baseline — session fastest lap */}
+          <div className={styles.baselineRow}>
+            <span className={styles.lapNum}>L{stats.fastestLap.lap}</span>
+            <span className={styles.lapTime}>{formatTime(stats.fastestLap.time)}</span>
+            <span className={styles.bestBadge}>BEST</span>
+          </div>
+
+          {/* Up to 3 most recent non-best laps with delta to best */}
+          {stats.recentLaps.length > 0 && (
+            <div className={styles.recentLaps}>
+              {stats.recentLaps.map((rec) => {
+                const delta = rec.time - stats.fastestLap!.time
+                return (
+                  <div className={styles.lapRow} key={rec.lap}>
+                    <span className={styles.lapNum}>L{rec.lap}</span>
+                    <span className={styles.lapTime}>{formatTime(rec.time)}</span>
+                    <span
+                      className={styles.lapDiff}
+                      style={{ color: delta <= 0 ? '#4ade80' : delta < 0.3 ? '#94a3b8' : delta < 0.8 ? '#fbbf24' : '#f87171' }}
+                    >
+                      {formatDelta(delta)}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
-          ))}
-          {stats.degradation !== null && (
-            <div className={styles.degSummary}>
-              Avg deg: <span style={{ color: stats.degradation > 0.15 ? '#f87171' : '#94a3b8' }}>
-                {stats.degradation > 0 ? '+' : ''}{stats.degradation.toFixed(3)}s/lap
+          )}
+
+          {/* Average deg — the headline number */}
+          {stats.avgDelta !== null && (
+            <div className={styles.degAvg}>
+              <span className={styles.degAvgLabel}>
+                AVG LAST {stats.recentLaps.length} vs BEST
+              </span>
+              <span
+                className={styles.degAvgValue}
+                style={{
+                  color: stats.avgDelta <= 0.1 ? '#4ade80'
+                       : stats.avgDelta <= 0.5 ? '#fbbf24'
+                       : '#f87171'
+                }}
+              >
+                +{stats.avgDelta.toFixed(3)}s
               </span>
             </div>
           )}

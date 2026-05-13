@@ -228,8 +228,10 @@ Only meaningful in official race sessions; always computed but shown/hidden via 
 ### Pit Strategy (`/pit-strategy`, 360×420)
 Three sections (each independently toggled via config):
 - **Fuel** — current level, per-lap consumption (measured at lap boundaries), laps remaining
-- **Tire Deg** — rolling 8-lap stint history, avg deg rate per lap
+- **Tire Deg** — session-best lap as rolling baseline (updates while improving, locks at peak); up to 3 most recent non-best laps with delta to best; prominent avg-delta headline number
 - **Pit Window** — estimated last lap to pit based on current fuel
+
+**Tire Deg logic:** `fastestLap = lapHistory.reduce(min by time)` — recalculated every render from full history so it always reflects the true session best. Recent laps exclude the fastest lap so the display shows actual wear laps, not the peak repeated. `avgDelta` is the mean of those ≤3 laps' delta to best. Color thresholds: green ≤ 0.1s, amber ≤ 0.5s, red > 0.5s. All laps kept in `lapHistoryRef` (max 30); diffs computed at render time, never stored.
 
 ### Tire Temps (`/tire-temps`, 220×145)
 4-corner colored blocks (inner/mid/outer). Color scale: `#1e293b` (cold/no data) → blue → green → yellow → red (hot). Uses surface temps if available, falls back to carcass temps (logged to console at connect time).

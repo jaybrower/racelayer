@@ -121,12 +121,54 @@
   font-variant-numeric: tabular-nums;
 }
 
-.degSummary {
-  margin-top: 6px;
-  font-size: 11px;
-  color: #64748b;
-  padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+/* Baseline (session best) row */
+.baselineRow {
+  display: grid;
+  grid-template-columns: 28px 1fr 40px;
+  align-items: center;
+  padding: 3px 0 5px;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin-bottom: 4px;
+}
+
+.bestBadge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #38bdf8;
+  text-align: right;
+}
+
+/* Recent lap rows */
+.recentLaps {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Average degradation — headline number */
+.degAvg {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.degAvgLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #475569;
+}
+
+.degAvgValue {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .pitWindow {
