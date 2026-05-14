@@ -14,7 +14,7 @@
 
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
 
-App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.0`
+App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.1`
 GitHub: `https://github.com/jaybrower/racelayer`
 
 ## Project Structure
