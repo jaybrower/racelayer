@@ -299,12 +299,17 @@ Only meaningful in official race sessions; always computed but shown/hidden via 
 ### Pit Strategy (`/pit-strategy`, 360×420)
 Three sections (each independently toggled via config):
 - **Fuel** — current level, per-lap consumption (measured at lap boundaries), laps remaining
-- **Tire Deg** — session-best lap as rolling baseline (updates while improving, locks at peak); up to 3 most recent non-best laps with delta to best; prominent avg-delta headline number
+- **Tire Deg** — stint-scoped pace trend: stint best + last lap, headline trend (last vs avg of up-to-3 prior stint laps), secondary stint-best delta
 - **Pit Window** — estimated last lap to pit based on current fuel
 
-**Tire Deg logic:** `fastestLap = flyingLaps.reduce(min by time)` — recalculated every render from the **flying-laps subset** of history (`lapHistory.filter(r => !r.pitAffected)`) so it always reflects the true session best on clean tires. Recent laps exclude the fastest lap so the display shows actual wear laps, not the peak repeated. `avgDelta` is the mean of those ≤3 laps' delta to best. Color thresholds: green ≤ 0.1s, amber ≤ 0.5s, red > 0.5s. All laps kept in `lapHistoryRef` (max 30); diffs computed at render time, never stored.
+**Tire Deg logic (stint-scoped):** A "stint" is the contiguous run of clean flying laps since the most recent pit-affected lap. Computed by walking back from the end of `lapHistory` until a `pitAffected` lap is hit — everything after that is the current stint. Two numbers are derived:
 
-**Pit-affected lap filtering:** Each `LapRecord` carries a `pitAffected: boolean` flag indicating whether the player was on pit road at any point during that lap (out-lap, in-lap, or a full pit stop mid-lap). A sticky `wasInPitThisLapRef` is OR'd with the player's per-tick `inPit` state and committed into the record at lap completion, then reset for the new lap. It's initialized to `true` at session start (every session begins with the player in the pit stall, so lap 1 is always an out-lap). Pit-affected laps are filtered out of *both* the best-lap baseline and the recent-laps display — otherwise an out-lap's time would either become a fake "best" or get fed into the avg-deg headline number as catastrophic wear.
+1. **Headline trend** = `lastLap.time − avg(prior up-to-3 stint laps)`. Directional ("am I getting faster or slower?"). Null on s1; muted styling until the window has 3 prior samples (s4+). Color thresholds: green ≤ −0.05s (improving), neutral grey −0.05 to +0.05s, amber to +0.30s, red > +0.30s. A bad lap in the prior window inflates the baseline so the next lap reads artificially fast — known behaviour, self-corrects as the outlier rolls out.
+2. **Stint-best delta** = `lastLap.time − stintBest.time`. Always ≥ 0. Smaller / secondary in the UI. "How off-peak am I right now?" Color: grey ≤ 0.1s, amber ≤ 0.5s, red > 0.5s.
+
+Session-best is *not* referenced here — a fresh-tire run from an earlier stint tells you nothing about the current set. All laps kept in `lapHistoryRef` (max 30); deltas computed at render time, never stored.
+
+**Pit-affected lap filtering:** Each `LapRecord` carries a `pitAffected: boolean` flag indicating whether the player was on pit road at any point during that lap (out-lap, in-lap, or a full pit stop mid-lap). A sticky `wasInPitThisLapRef` is OR'd with the player's per-tick `inPit` state and committed into the record at lap completion, then reset for the new lap. It's initialized to `true` at session start (every session begins with the player in the pit stall, so lap 1 is always an out-lap). The pit-affected flag both **filters laps from the stint** (a pit-affected lap is the stint boundary) and **resets the stint** — completing an in-lap/pit-lap immediately starts a fresh stint on the next clean lap.
 
 ### Tire Temps (`/tire-temps`, 220×145)
 4-corner colored blocks (inner/mid/outer). Color scale: `#1e293b` (cold/no data) → blue → green → yellow → red (hot). Uses surface temps if available, falls back to carcass temps (logged to console at connect time).
