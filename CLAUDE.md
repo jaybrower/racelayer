@@ -2,13 +2,59 @@
 
 > **Documentation rule:** Whenever code changes are made in this repo — new features, bug fixes, config additions, SDK variable discoveries — update this file and `README.md` in the same commit. The goal is for `CLAUDE.md` to always reflect the actual state of the codebase so future sessions can onboard instantly without re-deriving context from reading source files.
 
-> **Branch policy:** `main` requires a pull request — direct pushes are blocked. At the start of every session, pull the latest from `main` and create a feature branch before doing any work:
+> **Branch policy:** `main` tracks the **latest released code** — every merge into `main` is a release moment. `main` requires a pull request; direct pushes are blocked. The workflow uses three branch kinds plus an occasional fourth:
+>
+> | Branch | Purpose | Cut from | Merges to |
+> |---|---|---|---|
+> | `main` | Latest released code (one commit per release) | n/a | n/a |
+> | `release/vX.Y.Z` | Staging area for the next release; one active at a time | `main` (when the release is opened) | `main` (at release time) |
+> | `feat/short-name` | One feature or fix at a time | `main` | active `release/vX.Y.Z` |
+> | `hotfix/vX.Y.Z` | Urgent patch against a shipped release | `main` | `main`, then forward-merge into active `release/*` |
+>
+> **Why this shape:** features get smaller, more focused PRs into the release branch; pre-release builds can be cut from `release/*` without disturbing `main`; `main`'s history reads as a release log. One release branch is open at a time so feature targeting stays simple.
+>
+> **Start-of-session recipe** — always branch features from `main`, not from the active release branch:
 > ```bash
-> git checkout main
-> git pull
+> git checkout main && git pull
 > git checkout -b feat/your-feature-name
+> # ... build and commit ...
+>
+> # When ready to open the PR, rebase onto the active release branch
+> git fetch origin
+> git rebase origin/release/v0.1.3   # whichever release is open
+> git push -u origin feat/your-feature-name
+> # Open PR: feat/your-feature-name → release/v0.1.3 (NOT main)
 > ```
-> Commit changes to the feature branch, then open a PR to merge into `main`. Use short, descriptive branch names — e.g. `feat/map-overlay`, `fix/fuel-calc`, `chore/update-deps`.
+> Branching from `main` keeps features release-agnostic — a feature that doesn't ship with the active release can simply be retargeted to the next one without re-baselining.
+>
+> **Escape hatch:** if a feature depends on changes already accepted into the active release branch (e.g. extending a config type another in-flight feature added), branch from `release/vX.Y.Z` directly instead. This should be rare; the strong default is `main`.
+>
+> **Opening a new release branch** — done by the release manager when the next release is ready to start accumulating features:
+> ```bash
+> git checkout main && git pull
+> git checkout -b release/v0.1.3
+> # Bump version in package.json + CLAUDE.md to 0.1.3 in the same commit that creates the branch
+> git push -u origin release/v0.1.3
+> ```
+> Bumping the version at branch creation means every feature merging into the release sees the right version number; pre-release builds can be tagged as `v0.1.3-beta.N` directly off the release branch.
+>
+> **Tagging conventions:**
+> - **Stable releases** (`v0.1.3`) are tagged on the merge commit on `main` after the release-branch PR lands.
+> - **Pre-release builds** (`v0.1.3-beta.1`, `v0.1.3-rc.1`) are tagged on the `release/v0.1.3` branch itself. Mark these as `--prerelease` on GitHub and **do not upload `latest.yml`** for them, or stable users would be offered the beta via `electron-updater`.
+>
+> **Hotfix flow:**
+> ```bash
+> git checkout main && git pull
+> git checkout -b hotfix/v0.1.2.1
+> # Fix, bump patch version, commit
+> git push -u origin hotfix/v0.1.2.1
+> # Open PR: hotfix/* → main
+> # After merge + tag + release: forward-merge main into the active release branch
+> git checkout release/v0.1.3 && git pull
+> git merge main && git push
+> ```
+>
+> **Branch naming:** keep names short and conventional-commits-aligned — `feat/closing-rate`, `fix/pit-mode-gap`, `chore/branch-policy-update`. Release branches always carry the `v` prefix to match git tags: `release/v0.1.3`, never `release/0.1.3`.
 
 ## What This Is
 
