@@ -356,14 +356,22 @@ export default function Settings() {
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(DEFAULT_SHORTCUTS)
   const [saving, setSaving] = useState(false)
   const [launchOnStartup, setLaunchOnStartup] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
 
   useEffect(() => {
     window.iracingOverlay.getDevMode().then(setDevModeLocal)
     window.iracingOverlay.getShortcuts().then(setShortcuts)
     window.iracingOverlay.getStartupEnabled().then(setLaunchOnStartup)
+    window.iracingOverlay.getVersion().then(setAppVersion)
+    window.iracingOverlay.getUpdateStatus().then(setUpdateStatus)
 
     window.iracingOverlay.onDevModeChanged(setDevModeLocal)
-    return () => window.iracingOverlay.removeAllListeners('devMode:changed')
+    window.iracingOverlay.onUpdateStatus(setUpdateStatus)
+    return () => {
+      window.iracingOverlay.removeAllListeners('devMode:changed')
+      window.iracingOverlay.removeAllListeners('update:status')
+    }
   }, [])
 
   const toggleStartup = useCallback(async (enabled: boolean) => {
@@ -422,6 +430,102 @@ export default function Settings() {
                 <span className={styles.toggleTrack} />
                 <span className={styles.toggleThumb} />
               </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Updates */}
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionTitle}>Updates</span>
+          </div>
+          <div className={styles.sectionBody}>
+            <div className={styles.updateRow}>
+              <div className={styles.updateVersion}>
+                <span className={styles.toggleLabel}>RaceLayer</span>
+                {appVersion && (
+                  <span className={styles.versionBadge}>v{appVersion}</span>
+                )}
+              </div>
+
+              {/* Idle — ready to check */}
+              {updateStatus.state === 'idle' && (
+                <button
+                  className={styles.updateBtn}
+                  onClick={() => window.iracingOverlay.checkForUpdates()}
+                >
+                  Check for updates
+                </button>
+              )}
+
+              {/* Checking */}
+              {updateStatus.state === 'checking' && (
+                <span className={styles.updateMuted}>Checking…</span>
+              )}
+
+              {/* Up to date */}
+              {updateStatus.state === 'not-available' && (
+                <div className={styles.updateGood}>
+                  <span className={styles.updateGoodIcon}>✓</span>
+                  Up to date
+                </div>
+              )}
+
+              {/* Update available — prompt to download */}
+              {updateStatus.state === 'available' && (
+                <div className={styles.updateAvailable}>
+                  <span className={styles.updateAvailableText}>
+                    v{updateStatus.version} available
+                  </span>
+                  <button
+                    className={`${styles.updateBtn} ${styles.updateBtnPrimary}`}
+                    onClick={() => window.iracingOverlay.downloadUpdate()}
+                  >
+                    Download
+                  </button>
+                </div>
+              )}
+
+              {/* Downloading */}
+              {updateStatus.state === 'downloading' && (
+                <div className={styles.updateProgress}>
+                  <div className={styles.updateProgressBar}>
+                    <div
+                      className={styles.updateProgressFill}
+                      style={{ width: `${updateStatus.percent}%` }}
+                    />
+                  </div>
+                  <span className={styles.updateMuted}>{updateStatus.percent}%</span>
+                </div>
+              )}
+
+              {/* Ready to install */}
+              {updateStatus.state === 'ready' && (
+                <div className={styles.updateAvailable}>
+                  <span className={styles.updateAvailableText}>
+                    v{updateStatus.version} ready
+                  </span>
+                  <button
+                    className={`${styles.updateBtn} ${styles.updateBtnPrimary}`}
+                    onClick={() => window.iracingOverlay.installUpdate()}
+                  >
+                    Restart &amp; Install
+                  </button>
+                </div>
+              )}
+
+              {/* Error */}
+              {updateStatus.state === 'error' && (
+                <div className={styles.updateError}>
+                  <span>Update failed</span>
+                  <button
+                    className={styles.updateBtn}
+                    onClick={() => window.iracingOverlay.checkForUpdates()}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

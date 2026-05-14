@@ -8,6 +8,15 @@ interface ShortcutMap {
   openSettings: string
 }
 
+type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available';     version: string }
+  | { state: 'not-available' }
+  | { state: 'downloading';   percent: number }
+  | { state: 'ready';         version: string }
+  | { state: 'error';         message: string }
+
 interface Window {
   iracingOverlay: {
     onTelemetryUpdate: (callback: (data: unknown) => void) => void
@@ -26,5 +35,11 @@ interface Window {
     removeAllListeners: (channel: string) => void
     getStartupEnabled: () => Promise<boolean>
     setStartupEnabled: (enable: boolean) => Promise<void>
+    getVersion: () => Promise<string>
+    getUpdateStatus: () => Promise<UpdateStatus>
+    checkForUpdates: () => Promise<void>
+    downloadUpdate: () => Promise<void>
+    installUpdate: () => Promise<void>
+    onUpdateStatus: (callback: (status: UpdateStatus) => void) => void
   }
 }
