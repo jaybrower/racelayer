@@ -334,7 +334,7 @@ app.whenReady().then(async () => {
   const defaults = defaultOverlayPositions(width, height)
 
   const OVERLAYS: OverlayDef[] = [
-    { name: 'relative',     route: 'relative',     width: 400, height: 520, ...defaults.relative },
+    { name: 'relative',     route: 'relative',     width: 460, height: 520, ...defaults.relative },
     { name: 'gauges',       route: 'gauges',        width: 860, height: 180, ...defaults.gauges },
     { name: 'pit-strategy', route: 'pit-strategy',  width: 360, height: 420, ...defaults['pit-strategy'] },
     { name: 'tire-temps',   route: 'tire-temps',    width: 220, height: 145, ...defaults['tire-temps'] },

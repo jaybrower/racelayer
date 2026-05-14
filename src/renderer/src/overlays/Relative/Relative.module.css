@@ -4,7 +4,7 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   overflow: hidden;
-  min-width: 380px;
+  min-width: 440px;
   font-family: system-ui, -apple-system, sans-serif;
   backdrop-filter: blur(4px);
 }
@@ -57,6 +57,17 @@
   border-radius: 3px;
 }
 
+.pitBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  padding: 0 6px;
+  border-radius: 3px;
+}
+
 .playerPos {
   margin-left: auto;
   font-size: 12px;
@@ -77,15 +88,16 @@
 
 .row {
   display: grid;
-  grid-template-columns: 34px 28px 30px 1fr 48px 44px 54px 62px;
+  grid-template-columns: 34px 28px 30px 1fr 48px 44px 54px 62px 48px;
   align-items: center;
   gap: 0;
   padding: 4px 12px;
   transition: background 0.1s;
 }
 
-/* All optional columns (delta, iRating, SR, irChange) use visibility:hidden so the
-   grid layout stays stable regardless of which columns are active. */
+/* All optional columns (delta, iRating, SR, irChange, closingRate) use
+   visibility:hidden so the grid layout stays stable regardless of which
+   columns are active. */
 
 .row:hover {
   background: rgba(255, 255, 255, 0.03);
@@ -111,7 +123,7 @@
 
 .carNum {
   font-size: 10px;
-  color: #475569;
+  color: #94a3b8;
   font-variant-numeric: tabular-nums;
 }
 
@@ -148,4 +160,13 @@
   text-align: right;
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.closingRate {
+  font-size: 10px;
+  text-align: right;
+  padding-left: 8px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }

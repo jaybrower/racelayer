@@ -184,6 +184,13 @@ function OverlayConfigSection() {
           disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
           onChange={(st, val) => patch(c => { c.relative.columns.irChange[st] = val; return c })}
         />
+        <OverlayRow
+          label="Closing Rate"
+          flags={config.relative.columns.closingRate}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
+          onChange={(st, val) => patch(c => { c.relative.columns.closingRate[st] = val; return c })}
+        />
 
         {/* ── Pit Strategy ── */}
         <tr><td colSpan={4} className={styles.cfgSpacer} /></tr>
