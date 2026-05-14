@@ -6,6 +6,7 @@ import { startTelemetryPolling, stopTelemetryPolling } from './telemetry.js'
 import { registerConfigHandlers } from './config.js'
 import { getDevMode, setDevMode } from './devMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
+import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
 import type { IRacingTelemetry } from './telemetry.js'
 
 interface OverlayDef {
@@ -311,11 +312,21 @@ function registerStartupIpc() {
   })
 }
 
+function registerUpdaterIpc() {
+  ipcMain.handle('update:getStatus', () => getUpdateStatus())
+  ipcMain.handle('update:check',     () => checkForUpdates())
+  ipcMain.handle('update:download',  () => downloadUpdate())
+  ipcMain.handle('update:install',   () => quitAndInstall())
+  ipcMain.handle('app:version',      () => app.getVersion())
+}
+
 app.whenReady().then(async () => {
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
   registerDevModeIpc()
   registerStartupIpc()
+  registerUpdaterIpc()
+  initUpdater(broadcastToAll)
 
   // Use actual display bounds so positions scale to any monitor/DPI
   const { width, height } = screen.getPrimaryDisplay().workAreaSize

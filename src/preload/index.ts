@@ -60,6 +60,24 @@ const iracingOverlay = {
   setStartupEnabled: (enable: boolean): Promise<void> => {
     return ipcRenderer.invoke('startup:set', enable)
   },
+  getVersion: (): Promise<string> => {
+    return ipcRenderer.invoke('app:version')
+  },
+  getUpdateStatus: (): Promise<unknown> => {
+    return ipcRenderer.invoke('update:getStatus')
+  },
+  checkForUpdates: (): Promise<void> => {
+    return ipcRenderer.invoke('update:check')
+  },
+  downloadUpdate: (): Promise<void> => {
+    return ipcRenderer.invoke('update:download')
+  },
+  installUpdate: (): Promise<void> => {
+    return ipcRenderer.invoke('update:install')
+  },
+  onUpdateStatus: (callback: (status: unknown) => void) => {
+    ipcRenderer.on('update:status', (_event, status) => callback(status))
+  },
 }
 
 if (process.contextIsolated) {

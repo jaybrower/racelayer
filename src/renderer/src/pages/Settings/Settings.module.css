@@ -450,6 +450,124 @@
   border-color: rgba(239, 68, 68, 0.7);
 }
 
+/* ── Updates ────────────────────────────────────────────────────────────── */
+.updateRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+}
+
+.updateVersion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.versionBadge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.updateBtn {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.updateBtn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #cbd5e1;
+}
+
+.updateBtnPrimary {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.updateBtnPrimary:hover {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.8);
+  color: #93c5fd;
+}
+
+.updateMuted {
+  font-size: 12px;
+  color: #475569;
+}
+
+.updateGood {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.updateGoodIcon {
+  font-size: 14px;
+}
+
+.updateAvailable {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.updateAvailableText {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.updateProgress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  max-width: 200px;
+}
+
+.updateProgressBar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.updateProgressFill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.updateError {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #f87171;
+}
+
 /* ── Overlay config table ────────────────────────────────────────────────── */
 .cfgTable {
   width: 100%;

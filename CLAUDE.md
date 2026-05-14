@@ -14,7 +14,7 @@
 
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
 
-App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.0`
+App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.1`
 GitHub: `https://github.com/jaybrower/racelayer`
 
 ## Project Structure
@@ -117,6 +117,12 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 | `positions:reset` | renderer → main | Reset all overlay positions to defaults |
 | `startup:get` | renderer → main | Returns `boolean` — whether app is registered as a login item |
 | `startup:set` | renderer → main | Accepts `boolean` — registers or removes the Windows login item |
+| `app:version` | renderer → main | Returns current app version string from `app.getVersion()` |
+| `update:getStatus` | renderer → main | Returns current `UpdateStatus` object |
+| `update:check` | renderer → main | Triggers `autoUpdater.checkForUpdates()` |
+| `update:download` | renderer → main | Triggers `autoUpdater.downloadUpdate()` |
+| `update:install` | renderer → main | Calls `autoUpdater.quitAndInstall()` |
+| `update:status` | main → renderer | Broadcast on every update state transition |
 
 ### Telemetry Pipeline
 
@@ -249,14 +255,25 @@ Code exists in `src/renderer/src/overlays/Radar/`. Disabled because `CarIdxF2Tim
 
 ## Settings Window (680×560)
 
-Five sections:
+Six sections:
 1. **General** — launch-on-startup toggle (calls `app.setLoginItemSettings`; reads back on mount via `app.getLoginItemSettings`)
-2. **Developer Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
-3. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
-4. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
-5. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button
+2. **Updates** — current version badge + update lifecycle (check → download → restart & install); powered by `electron-updater`
+3. **Developer Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
+4. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
+5. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
+6. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button
 
 IPC channels for startup: `startup:get` (returns `boolean`) and `startup:set` (accepts `boolean`). Both call Electron's `app.getLoginItemSettings()` / `app.setLoginItemSettings()` which writes the Windows login item registry key — no additional libraries needed.
+
+### In-App Updater (`src/main/updater.ts`)
+Uses `electron-updater` (reads `publish` config from `package.json` — GitHub provider). `autoDownload: false` so the user explicitly triggers the download. `autoInstallOnAppQuit: true` so a downloaded update installs cleanly on normal exit even if the user doesn't click "Restart & Install".
+
+**Update state machine:** `idle → checking → available | not-available | error`, then `available → downloading → ready → (restart & install)`.
+
+IPC channels: `update:getStatus`, `update:check`, `update:download`, `update:install`, `app:version`.
+The main process broadcasts `update:status` events to all windows so the Settings UI stays in sync.
+
+**Important for releases:** GitHub releases must include the `latest.yml` file that electron-builder generates in `dist/`. This is the manifest `electron-updater` uses to find and verify the download. Upload it alongside the `.exe` files.
 
 Default shortcuts:
 - Layout Mode (toggle drag): `Ctrl+Shift+L`

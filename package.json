@@ -1,6 +1,6 @@
 {
   "name": "racelayer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "RaceLayer — iRacing HUD overlay",
   "author": "Jay Brower",
   "main": "out/main/index.js",
@@ -30,8 +30,18 @@
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "resources/icon.ico"
     },
@@ -68,6 +78,7 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
+    "electron-updater": "^6.8.3",
     "js-yaml": "^4.1.1",
     "koffi": "^2.16.2",
     "react": "^19.0.0",
