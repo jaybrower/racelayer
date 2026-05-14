@@ -2,6 +2,14 @@
 
 > **Documentation rule:** Whenever code changes are made in this repo — new features, bug fixes, config additions, SDK variable discoveries — update this file and `README.md` in the same commit. The goal is for `CLAUDE.md` to always reflect the actual state of the codebase so future sessions can onboard instantly without re-deriving context from reading source files.
 
+> **Branch policy:** `main` requires a pull request — direct pushes are blocked. At the start of every session, pull the latest from `main` and create a feature branch before doing any work:
+> ```bash
+> git checkout main
+> git pull
+> git checkout -b feat/your-feature-name
+> ```
+> Commit changes to the feature branch, then open a PR to merge into `main`. Use short, descriptive branch names — e.g. `feat/map-overlay`, `fix/fuel-calc`, `chore/update-deps`.
+
 ## What This Is
 
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
