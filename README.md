@@ -10,6 +10,7 @@ A lightweight, customizable iRacing HUD overlay for Windows. Transparent overlay
 Proximity list centered on your car — shows drivers ahead and behind with configurable columns.
 
 - Gap to player (seconds / laps)
+- Closing rate (s/lap) — how fast each car is catching or pulling away, color-coded from your perspective (green = good for you, red = bad)
 - Current position
 - Position gained/lost vs. starting grid
 - iRating and Safety Rating

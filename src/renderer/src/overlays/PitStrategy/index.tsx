@@ -26,6 +26,11 @@ function formatDelta(s: number): string {
 interface LapRecord {
   lap: number
   time: number
+  /** True when the player was on pit road at any point during this lap — i.e.
+   *  it's an out-lap, in-lap, or a lap that included a full pit stop.  These
+   *  laps are excluded from tire-deg analysis because their times don't reflect
+   *  tire wear (partial distance, cold tires, refuel delta, etc.). */
+  pitAffected: boolean
 }
 
 export default function PitStrategy() {
@@ -38,16 +43,42 @@ export default function PitStrategy() {
   const lapHistoryRef = useRef<LapRecord[]>([])
   const lastTrackedLapRef = useRef<number>(0)
 
+  // Sticky flag: set true any tick the player is on pit road during the current
+  // lap, reset when a lap completes.  Initialized true because a session starts
+  // with the player in the pit stall, making lap 1 an out-lap by definition.
+  const wasInPitThisLapRef = useRef<boolean>(true)
+
+  // Detect player pit-road state every tick and OR into the sticky flag.
+  // Never clears the flag here — only the lap-transition effect resets it,
+  // so a pit visit early in the lap correctly taints the whole lap even if
+  // the player has rejoined the racing surface by the time it completes.
+  useEffect(() => {
+    if (!t.connected) return
+    const playerInPit = t.cars.find((c) => c.carIdx === t.playerCarIdx)?.inPit ?? false
+    if (playerInPit) wasInPitThisLapRef.current = true
+  }, [t.connected, t.cars, t.playerCarIdx])
+
   useEffect(() => {
     if (!t.connected || t.lapLastLapTime <= 0) return
     if (t.lap <= 1) {
       lapHistoryRef.current = []
       lastTrackedLapRef.current = 0
+      // Session/lap-counter reset — start fresh with the assumption the player
+      // is currently in pit (true at lap 1 in every session type).
+      wasInPitThisLapRef.current = true
       return
     }
     if (t.lap > lastTrackedLapRef.current) {
       lastTrackedLapRef.current = t.lap
-      lapHistoryRef.current.push({ lap: t.lap - 1, time: t.lapLastLapTime })
+      lapHistoryRef.current.push({
+        lap: t.lap - 1,
+        time: t.lapLastLapTime,
+        pitAffected: wasInPitThisLapRef.current,
+      })
+      // Reset for the new lap.  If the player is still on pit road right now
+      // (e.g. just crossed pit-exit line), the per-tick pit-detection effect
+      // will re-arm the flag on the next frame.
+      wasInPitThisLapRef.current = false
       // Keep a full stint's worth; 30 laps is more than enough
       if (lapHistoryRef.current.length > 30) lapHistoryRef.current.shift()
     }
@@ -110,16 +141,22 @@ export default function PitStrategy() {
     const pitLap = lapsOnFuel > 0 ? Math.floor(t.lap + lapsOnFuel - 0.5) : null
 
     // ── Tire deg: session-best baseline + recent wear laps ──────────────────────
+    // Only clean flying laps count toward tire-deg analysis.  Out-laps, in-laps,
+    // and laps containing a full pit stop are dropped — their times reflect pit
+    // activity, not tire wear, and would otherwise pollute both the best-lap
+    // baseline and the recent-laps "wear" sample.
+    const flyingLaps = lapHistory.filter((r) => !r.pitAffected)
+
     // Fastest lap of the session — this is the rolling baseline.
     // It moves forward as the driver improves during warm-up, then locks in at peak.
-    const fastestLap = lapHistory.length > 0
-      ? lapHistory.reduce((best, r) => r.time < best.time ? r : best)
+    const fastestLap = flyingLaps.length > 0
+      ? flyingLaps.reduce((best, r) => r.time < best.time ? r : best)
       : null
 
-    // Up to 3 most recent laps that aren't the fastest lap.
+    // Up to 3 most recent flying laps that aren't the fastest lap.
     // Excluding the best means this window shows actual wear laps, not the peak.
     const recentLaps = fastestLap
-      ? lapHistory.filter(r => r !== fastestLap).slice(-3)
+      ? flyingLaps.filter(r => r !== fastestLap).slice(-3)
       : []
 
     // Average delta of those ≤3 laps vs the best — the headline tire wear number.

@@ -14,7 +14,7 @@
 
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
 
-App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.1`
+App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.2`
 GitHub: `https://github.com/jaybrower/racelayer`
 
 ## Project Structure
@@ -219,12 +219,23 @@ RPM bar, throttle/brake input trace, gear indicator, speed, lap delta to best, f
 
 TC/ABS are rendered via the `AidBlock` component which accepts a single `activeColor` hex string and derives rgba tints at render time (border at 0.75 opacity, background at 0.10 opacity). TC uses amber (`#fbbf24`), ABS uses purple (`#a78bfa`). Both auto-hide when `config.global.hideUnsupportedElements` is true and the car lacks the corresponding capability.
 
-### Relative (`/relative`, 400×520)
-Shows cars within ±5 positions of player sorted by computed gap (not `f2Time` — see SDK Notes). 8-column grid:
-`34px 28px 30px 1fr 48px 44px 54px 62px`
-Columns: Position | Pos-Δ | Car# | Name | iRating | Safety Rating | Est. iR Δ | Gap
+### Relative (`/relative`, 460×520)
+Shows cars within ±5 positions of player sorted by computed gap (not `f2Time` — see SDK Notes). 9-column grid:
+`34px 28px 30px 1fr 48px 44px 54px 62px 48px`
+Columns: Position | Pos-Δ | Car# | Name | iRating | Safety Rating | Est. iR Δ | Gap | Closing Rate
 
 Gap is shown to tenths of a second (e.g. `+1.3`). Lapped cars show `+N Lap` / `-N Lap`.
+
+**Closing Rate column** shows how fast each car is closing on / pulling away from the player in seconds-per-lap. Positive value (green/red depending on direction) = closing, negative = separating. Computed via least-squares linear regression over an 8-second rolling window of gap history per car (`gapHistoryRef`, updated in a `useEffect` once per telemetry tick). Cells stay blank when fewer than 3 samples are recorded, the time span is <1s, or the magnitude is below the 0.05 s/lap noise floor. History is cleared per car on a sudden gap jump >20s (lapping, off-track→on-track transition, session reset) and dropped entirely when a car leaves the on-track set.
+
+Color convention: green = good-for-player (catching a car ahead OR pulling away from a car behind), red = bad-for-player. The sign convention is unified across rows — positive always means closing — and the color disambiguates whether closing is good or bad for the player.
+
+**Pit mode** kicks in when the player car is `inPit` (surface `1`=InPitStall or `2`=AproachingPits). The player's `LapDistPct` reflects pit-lane position rather than racing-line position, so the gap math becomes meaningless. While in pit:
+- The list is sorted by `car.position` (classified leaderboard rank) instead of by computed gap; unclassified cars (`position === 0`) sort to the end so they can't displace the player from the visible window.
+- The player remains in the visible set even though `!onTrack`, so they stay the slicing anchor.
+- The Gap column renders `—` (dim gray) and the Closing Rate column is forcibly hidden — both are mathematically nonsense against the pit-lane reference.
+- Gap history is cleared on entry to pit (in the `useEffect`) so the regression doesn't poison itself with parked-player samples after rejoining.
+- A `PIT` badge appears in the overlay header next to the session badge.
 
 Safety Rating is rendered by the `SafetyBadge` component as a letter + symbol badge, color-coded by sub-rating value:
 - `≤ 2.0` → red (`#f87171`) + `!`
@@ -245,7 +256,9 @@ Three sections (each independently toggled via config):
 - **Tire Deg** — session-best lap as rolling baseline (updates while improving, locks at peak); up to 3 most recent non-best laps with delta to best; prominent avg-delta headline number
 - **Pit Window** — estimated last lap to pit based on current fuel
 
-**Tire Deg logic:** `fastestLap = lapHistory.reduce(min by time)` — recalculated every render from full history so it always reflects the true session best. Recent laps exclude the fastest lap so the display shows actual wear laps, not the peak repeated. `avgDelta` is the mean of those ≤3 laps' delta to best. Color thresholds: green ≤ 0.1s, amber ≤ 0.5s, red > 0.5s. All laps kept in `lapHistoryRef` (max 30); diffs computed at render time, never stored.
+**Tire Deg logic:** `fastestLap = flyingLaps.reduce(min by time)` — recalculated every render from the **flying-laps subset** of history (`lapHistory.filter(r => !r.pitAffected)`) so it always reflects the true session best on clean tires. Recent laps exclude the fastest lap so the display shows actual wear laps, not the peak repeated. `avgDelta` is the mean of those ≤3 laps' delta to best. Color thresholds: green ≤ 0.1s, amber ≤ 0.5s, red > 0.5s. All laps kept in `lapHistoryRef` (max 30); diffs computed at render time, never stored.
+
+**Pit-affected lap filtering:** Each `LapRecord` carries a `pitAffected: boolean` flag indicating whether the player was on pit road at any point during that lap (out-lap, in-lap, or a full pit stop mid-lap). A sticky `wasInPitThisLapRef` is OR'd with the player's per-tick `inPit` state and committed into the record at lap completion, then reset for the new lap. It's initialized to `true` at session start (every session begins with the player in the pit stall, so lap 1 is always an out-lap). Pit-affected laps are filtered out of *both* the best-lap baseline and the recent-laps display — otherwise an out-lap's time would either become a fake "best" or get fed into the avg-deg headline number as catastrophic wear.
 
 ### Tire Temps (`/tire-temps`, 220×145)
 4-corner colored blocks (inner/mid/outer). Color scale: `#1e293b` (cold/no data) → blue → green → yellow → red (hot). Uses surface temps if available, falls back to carcass temps (logged to console at connect time).

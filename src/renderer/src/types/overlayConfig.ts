@@ -52,6 +52,14 @@ export interface RelativeConfig {
      * unaffected.
      */
     irChange:      SessionFlags
+    /**
+     * Rate at which each car is closing on / separating from the player,
+     * expressed in seconds-per-lap. Positive = closing, negative = pulling away.
+     * Computed from an 8-second rolling window of gap history; cells stay blank
+     * until enough samples are collected or when the rate is below the
+     * statistical-noise threshold.
+     */
+    closingRate:   SessionFlags
   }
 }
 
@@ -103,6 +111,7 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
       safetyRating:  { practice: true,  qualifying: false, race: true  },
       positionDelta: { practice: false, qualifying: false, race: true  },
       irChange:      { practice: false, qualifying: false, race: true  },
+      closingRate:   { practice: true,  qualifying: false, race: true  },
     },
   },
   pitStrategy: {
@@ -171,6 +180,7 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
         safetyRating:  mergeSF(def.relative.columns.safetyRating,  storedRelCols.safetyRating),
         positionDelta: mergeSF(def.relative.columns.positionDelta, storedRelCols.positionDelta),
         irChange:      mergeSF(def.relative.columns.irChange,      storedRelCols.irChange),
+        closingRate:   mergeSF(def.relative.columns.closingRate,   storedRelCols.closingRate),
       },
     },
     pitStrategy: {
