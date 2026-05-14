@@ -2,6 +2,7 @@
   "name": "racelayer",
   "version": "0.1.0",
   "description": "RaceLayer — iRacing HUD overlay",
+  "author": "Jay Brower",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -38,7 +39,11 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": false,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-portable-${version}.${ext}"
     },
     "publish": {
       "provider": "github",
