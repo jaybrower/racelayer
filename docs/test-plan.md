@@ -173,13 +173,23 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 
 ## Settings window
 
-- [ ] **General** — startup toggle round-trips with Windows login items.
-- [ ] **Updates** — current version badge shows the package.json version. (See **Updater** section below for the rest.)
+The Settings window uses a left-rail sidebar with six panes: **General**, **Overlays**, **Shortcuts**, **Preview Mode**, **Updates**, **About**. Each pane scrolls independently while the sidebar stays put.
+
+- [ ] **Sidebar nav** — clicking each entry switches the right pane; the active entry highlights blue.
+- [ ] **General → Launch on startup** — toggle round-trips with Windows login items.
+- [ ] **General → Auto-hide unsupported overlays** — toggle off; an overlay with no supported features still appears (empty placeholder). Toggle on; the overlay disappears.
+- [ ] **General → Overlay Positions** — "Reset to defaults" snaps every overlay back. Layout-Mode shortcut hint shows the current keybinding.
+- [ ] **Overlays — sticky session header** — the "Practice / Qualifying / Race" column header stays visible while scrolling down through all overlays.
+- [ ] **Overlays — per-overlay grouping** — each overlay has a visible group header (Gauges, Tire Temps, Relative, Pit Strategy, Radar) with a brief description above its rows.
+- [ ] **Overlays — tooltip on hover** — hover any row; a native browser tooltip appears within ~500ms explaining the toggle. Verify at least 3 different rows (one overlay-level, one element-level, one column-level on Relative).
+- [ ] **Overlays — flipping a checkbox** — flip a per-session-type checkbox. The corresponding overlay or element hides immediately in the affected session type.
+- [ ] **Shortcuts** — change a shortcut to a different modifier combo (e.g. `Ctrl+Alt+L`). Verify the new combo works and the old combo does NOT.
+- [ ] **Shortcuts — conflict detection** — try to bind two actions to the same combo. The UI should refuse / warn.
 - [ ] **Preview Mode** — toggle on: overlays receive mock data immediately. Pick a session type (practice / qualifying / race); the Relative overlay updates its column visibility accordingly within a second or two.
-- [ ] **Keyboard Shortcuts** — change a shortcut to a different modifier combo (e.g. `Ctrl+Alt+L`). Verify the new combo works and the old combo does NOT.
-- [ ] **Shortcut conflict detection** — try to bind two actions to the same combo. The UI should refuse / warn.
-- [ ] **Overlay Visibility** — flip a per-session-type checkbox. The corresponding overlay/column hides immediately.
-- [ ] **Overlay Positions** — "Reset to defaults" snaps every overlay back. Edit mode instructions are clear.
+- [ ] **Updates** — current version badge shows the package.json version. (See **Updater** section below for the rest.)
+- [ ] **About — version** — RaceLayer version matches `package.json`.
+- [ ] **About — external links** — clicking GitHub repository / Changelog / Bug report / License each opens the user's default browser to the matching URL. The Settings window does not navigate; no new Electron window opens. Verify by clicking each of the four links.
+- [ ] **About — link security** — main process rejects non-http(s) schemes (sanity check: in the dev console run `window.iracingOverlay.openExternal('javascript:alert(1)')` — nothing happens, no error).
 
 ## In-app updater
 

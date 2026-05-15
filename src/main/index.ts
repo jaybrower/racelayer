@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, screen, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, globalShortcut, screen, ipcMain, Tray, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
@@ -336,11 +336,23 @@ function registerUpdaterIpc() {
   ipcMain.handle('app:version',      () => app.getVersion())
 }
 
+function registerShellIpc() {
+  // Open external URLs in the user's default browser.  Only http(s) is allowed
+  // so a compromised renderer can't be tricked into launching `file://`,
+  // `javascript:`, custom URL handlers, etc.
+  ipcMain.handle('app:openExternal', (_event, url: unknown) => {
+    if (typeof url !== 'string') return
+    if (!/^https?:\/\//i.test(url)) return
+    shell.openExternal(url)
+  })
+}
+
 app.whenReady().then(async () => {
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
   registerPreviewModeIpc()
   registerStartupIpc()
+  registerShellIpc()
   registerUpdaterIpc()
   initUpdater(broadcastToAll)
 

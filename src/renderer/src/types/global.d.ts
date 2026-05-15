@@ -40,6 +40,7 @@ interface Window {
     checkForUpdates: () => Promise<void>
     downloadUpdate: () => Promise<void>
     installUpdate: () => Promise<void>
+    openExternal: (url: string) => Promise<void>
     onUpdateStatus: (callback: (status: UpdateStatus) => void) => void
   }
 }

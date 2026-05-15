@@ -77,6 +77,12 @@ const iracingOverlay = {
   installUpdate: (): Promise<void> => {
     return ipcRenderer.invoke('update:install')
   },
+  // Open an http(s) URL in the user's default browser.  Main-process side
+  // validates the scheme so a compromised renderer can't launch arbitrary
+  // protocols.
+  openExternal: (url: string): Promise<void> => {
+    return ipcRenderer.invoke('app:openExternal', url)
+  },
   onUpdateStatus: (callback: (status: unknown) => void) => {
     ipcRenderer.on('update:status', (_event, status) => callback(status))
   },

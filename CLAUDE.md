@@ -208,6 +208,7 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 | `update:check` | renderer → main | Triggers `autoUpdater.checkForUpdates()` |
 | `update:download` | renderer → main | Triggers `autoUpdater.downloadUpdate()` |
 | `update:install` | renderer → main | Calls `autoUpdater.quitAndInstall()` |
+| `app:openExternal` | renderer → main | Open an http(s) URL in the user's default browser via `shell.openExternal`. Main rejects non-http(s) schemes. |
 | `update:status` | main → renderer | Broadcast on every update state transition |
 
 ### Telemetry Pipeline
@@ -361,13 +362,15 @@ Code exists in `src/renderer/src/overlays/Radar/`. Disabled because `CarIdxF2Tim
 
 ## Settings Window (680×560)
 
-Six sections:
-1. **General** — launch-on-startup toggle (calls `app.setLoginItemSettings`; reads back on mount via `app.getLoginItemSettings`)
-2. **Updates** — current version badge + update lifecycle (check → download → restart & install); powered by `electron-updater`
-3. **Preview Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
-4. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
-5. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
-6. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button
+Sidebar-tabbed layout. The window is a fixed `<aside>` sidebar with six nav entries on the left, and a single scrollable pane on the right. State is just `useState<PaneId>('general')` in `Settings/index.tsx`; per-pane components live under `Settings/panes/`.
+
+Six panes:
+1. **General** (`panes/GeneralPane.tsx`) — launch-on-startup toggle, global `Auto-hide unsupported overlays` toggle, Overlay Positions reset (with layout-mode hint).
+2. **Overlays** (`panes/OverlaysPane.tsx`) — the per-session-type matrix grouped by overlay, with a **sticky `<thead>`** (Practice / Qualifying / Race column labels stay visible while scrolling), group headers with short overlay descriptions, and **native `title` tooltips** on every row pulling copy from `panes/../lib.ts` (`OVERLAY_DESCRIPTIONS` / `ELEMENT_DESCRIPTIONS`).
+3. **Shortcuts** (`panes/ShortcutsPane.tsx`) — live-record new shortcuts (modifier-key combos only); the recorder helpers `keyEventToAccelerator` / `formatAccelerator` live in `Settings/lib.ts`.
+4. **Preview Mode** (`panes/PreviewModePane.tsx`) — enable/disable, pick simulated session type (practice/qualifying/race).
+5. **Updates** (`panes/UpdatesPane.tsx`) — current version badge + update lifecycle (check → download → restart & install); powered by `electron-updater`.
+6. **About** (`panes/AboutPane.tsx`) — version, external links to repo / changelog / new-issue / license. Links route through the `app:openExternal` IPC so they open in the user's default browser instead of hijacking the Settings window. Main-process side validates the URL is http(s) before calling `shell.openExternal`.
 
 IPC channels for startup: `startup:get` (returns `boolean`) and `startup:set` (accepts `boolean`). Both call Electron's `app.getLoginItemSettings()` / `app.setLoginItemSettings()` which writes the Windows login item registry key — no additional libraries needed.
 

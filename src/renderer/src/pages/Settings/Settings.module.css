@@ -33,14 +33,93 @@
   margin-top: 1px;
 }
 
-.body {
+/* ── Sidebar + pane layout ────────────────────────────────────────────────── */
+
+.layout {
   flex: 1;
   min-height: 0; /* allows flex child to shrink and actually scroll */
+  display: flex;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  padding: 12px 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.navBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  font-family: inherit;
+}
+
+.navBtn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+}
+
+.navBtnActive {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+
+.navBtnActive:hover {
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.navIcon {
+  display: inline-flex;
+  width: 18px;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.navLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane {
+  flex: 1;
+  min-width: 0;
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   overflow-y: auto;
+}
+
+.paneIntro {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 4px;
 }
 
 .section {
@@ -575,6 +654,24 @@
   font-size: 12px;
 }
 
+.cfgTableWrap {
+  /* Pane already scrolls; this wrapper exists so the table can establish
+     a positioning context for the sticky header. */
+  position: relative;
+}
+
+.cfgStickyHead th {
+  position: sticky;
+  top: 0;
+  /* Match the .pane background so column labels are readable while overlapping
+     scrolled content. Keep z-index above ordinary rows. */
+  background: #0f172a;
+  z-index: 2;
+  padding-top: 4px;
+  padding-bottom: 8px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
 .cfgHead {
   text-align: left;
   font-size: 9px;
@@ -582,7 +679,6 @@
   letter-spacing: 0.1em;
   color: #334155;
   text-transform: uppercase;
-  padding-bottom: 6px;
 }
 
 .cfgHeadCell {
@@ -592,8 +688,32 @@
   letter-spacing: 0.08em;
   color: #475569;
   text-transform: uppercase;
-  padding-bottom: 6px;
   min-width: 72px;
+}
+
+.overlayGroupHeader {
+  padding: 18px 0 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.overlayGroupHeader:first-child {
+  border-top: none;
+  padding-top: 6px;
+}
+
+.overlayGroupTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #cbd5e1;
+  text-transform: uppercase;
+}
+
+.overlayGroupDesc {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 2px;
+  line-height: 1.4;
 }
 
 .cfgRow td {
@@ -636,4 +756,77 @@
   height: 15px;
   cursor: pointer;
   accent-color: #3b82f6;
+}
+
+/* Hovering a row in the overlays matrix subtly highlights it so users
+   immediately see which row's tooltip will appear. */
+.cfgRow:hover {
+  background: rgba(59, 130, 246, 0.04);
+}
+.cfgRow:hover .cfgLabel {
+  color: #f1f5f9;
+}
+
+/* ── About pane ───────────────────────────────────────────────────────────── */
+
+.aboutHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 12px;
+}
+
+.aboutTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.02em;
+}
+
+.aboutVersion {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.aboutLinks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 16px;
+}
+
+.externalLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-left: -10px;
+  border-radius: 5px;
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.externalLink:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #bfdbfe;
+}
+
+.externalIcon {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.aboutFooter {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
