@@ -10,7 +10,8 @@
     "preview": "electron-vite preview",
     "icons": "node scripts/generate-icons.mjs",
     "dist": "electron-vite build && electron-builder",
-    "dist:dir": "electron-vite build && electron-builder --dir"
+    "dist:dir": "electron-vite build && electron-builder --dir",
+    "dist:pre": "node scripts/dist-prerelease.mjs"
   },
   "build": {
     "appId": "com.jaybrower.racelayer",
