@@ -1,6 +1,6 @@
 {
   "name": "racelayer",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "RaceLayer — iRacing HUD overlay",
   "author": "Jay Brower",
   "main": "out/main/index.js",
