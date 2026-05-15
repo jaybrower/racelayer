@@ -9,6 +9,8 @@ import {
   CLR_BOTH,
   CLR_2_LEFT,
   CLR_2_RIGHT,
+  computeRelativeGap,
+  computeReferenceLapTime,
 } from '../Relative/lib'
 import styles from './Radar.module.css'
 
@@ -33,20 +35,20 @@ const CAR_H = 16
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Convert f2Time (positive = player is ahead of them = they are BEHIND player)
- *  to a y-coordinate.  Ahead of player → smaller y (top of SVG). */
-function f2TimeToY(f2Time: number): number {
-  // f2Time < 0  → car is ahead of player  → show above centre
-  // f2Time > 0  → car is behind player    → show below centre
+/** Convert a player-relative gap (seconds, negative = car is ahead of player)
+ *  to a y-coordinate.  Cars ahead → smaller y (top of SVG). */
+function gapToY(gap: number): number {
+  // gap < 0  → car is ahead of player  → show above centre
+  // gap > 0  → car is behind player    → show below centre
   const centreY = TOTAL_H / 2
-  return centreY + f2Time * PX_PER_S
+  return centreY + gap * PX_PER_S
 }
 
-function carLabelColor(f2Time: number, clr: number): string {
-  const absT = Math.abs(f2Time)
-  if (absT < 1) return '#fbbf24'   // very close — amber warning
-  if (f2Time < 0) return '#60a5fa' // ahead of player — blue
-  return '#f97316'                  // behind player — orange
+function carLabelColor(gap: number): string {
+  const absT = Math.abs(gap)
+  if (absT < 1) return '#fbbf24'  // very close — amber warning
+  if (gap < 0) return '#60a5fa'   // ahead of player — blue
+  return '#f97316'                 // behind player — orange
 }
 
 // ── Overlay ───────────────────────────────────────────────────────────────────
@@ -59,16 +61,30 @@ export default function Radar() {
 
   const sType = t.sessionType === 'unknown' ? 'race' : t.sessionType
 
-  // useMemo must come before any conditional return (Rules of Hooks)
+  // useMemo must come before any conditional return (Rules of Hooks).
+  //
+  // Compute each opponent's player-relative gap from track position
+  // (`lapDistPct` + `lap`) using the same math as the Relative overlay.
+  // `CarIdxF2Time` is leader-relative and returns 0 for cars without a lap
+  // time, so it can't be used directly here.
+  //
+  // While the player is in pit, their `lapDistPct` reflects pit-lane
+  // position and the gap math is meaningless — return an empty list rather
+  // than draw misleading positions.
+  const playerCar = t.cars.find((c) => c.carIdx === t.playerCarIdx)
+  const playerInPit = !!playerCar?.inPit
   const nearby = useMemo(() => {
+    if (t.cars.length === 0 || playerInPit) return []
+    const referenceLapTime = computeReferenceLapTime(t, t.cars)
     return t.cars
-      .filter(c =>
-        c.carIdx !== t.playerCarIdx &&
-        (c.onTrack || c.inPit) &&
-        Math.abs(c.f2Time) <= WINDOW_S + 0.5
-      )
-      .sort((a, b) => a.f2Time - b.f2Time) // ahead first
-  }, [t.cars, t.playerCarIdx])
+      .filter((c) => c.carIdx !== t.playerCarIdx && c.onTrack)
+      .map((c) => ({
+        car: c,
+        gap: computeRelativeGap(c, t.lapDistPct, t.lap, referenceLapTime),
+      }))
+      .filter(({ gap }) => Math.abs(gap) <= WINDOW_S + 0.5)
+      .sort((a, b) => a.gap - b.gap) // ahead first
+  }, [t.cars, t.playerCarIdx, t.lapDistPct, t.lap, t.lapBestLapTime, t.lapLastLapTime, playerInPit])
 
   if (!config.radar.enabled[sType] && !editMode) return null
 
@@ -93,14 +109,14 @@ export default function Radar() {
   const hasRight = clr === CLR_RIGHT || clr === CLR_BOTH || clr === CLR_2_RIGHT
 
   // Assign lane positions: cars that are very close get left/right based on CarLeftRight signal
-  const closeAhead  = nearby.filter(c => c.f2Time < 0  && Math.abs(c.f2Time) < 2)
-  const closeBehind = nearby.filter(c => c.f2Time >= 0 && c.f2Time < 2)
+  const closeAhead  = nearby.filter((e) => e.gap < 0  && Math.abs(e.gap) < 2)
+  const closeBehind = nearby.filter((e) => e.gap >= 0 && e.gap < 2)
 
-  function laneFor(car: typeof nearby[0]): number {
-    const isClose = Math.abs(car.f2Time) < 2
+  function laneFor(entry: typeof nearby[0]): number {
+    const isClose = Math.abs(entry.gap) < 2
     if (!isClose) return LANE.centre
     // Try to assign left/right based on proximity flag for the closest cars
-    const idx = closeAhead.concat(closeBehind).indexOf(car)
+    const idx = closeAhead.concat(closeBehind).indexOf(entry)
     if (hasLeft && idx === 0) return LANE.left
     if (hasRight && (idx === 1 || (idx === 0 && !hasLeft))) return LANE.right
     return LANE.centre
@@ -163,13 +179,23 @@ export default function Radar() {
           )}
 
           {/* ── Opponent cars ── */}
-          {nearby.map((car) => {
-            const y    = f2TimeToY(car.f2Time)
-            const cx   = laneFor(car)
-            const col  = carLabelColor(car.f2Time, clr)
+          {nearby.map((entry) => {
+            const { car, gap } = entry
+            const cx   = laneFor(entry)
+            // Centre-lane cars share the player's x, so clamp y so their box
+            // never overlaps the player's: minimum centre-to-centre distance
+            // is CAR_H (boxes just touch).  Side-lane cars are offset
+            // horizontally and can sit at their true gap.
+            let y = gapToY(gap)
+            if (cx === LANE.centre) {
+              const minSep = CAR_H
+              if (gap < 0)      y = Math.min(y, centreY - minSep)
+              else if (gap > 0) y = Math.max(y, centreY + minSep)
+            }
+            const col  = carLabelColor(gap)
             const driver = t.drivers.find(d => d.carIdx === car.carIdx)
             const num  = driver?.carNumber ?? String(car.carIdx)
-            const absT = Math.abs(car.f2Time)
+            const absT = Math.abs(gap)
             const opacity = absT < 0.5 ? 1 : absT < 2 ? 0.85 : 0.6
 
             return (

@@ -33,7 +33,10 @@ export interface CarTelemetry {
   inPit: boolean
   lastLapTime: number  // seconds, 0 if no lap completed
   bestLapTime: number
-  f2Time: number       // seconds relative to player; negative = ahead of player
+  /** `CarIdxF2Time` — seconds behind the session leader (NOT the player), and
+   *  0 for cars that haven't set a lap time yet.  For player-relative gaps use
+   *  `computeRelativeGap()` in `overlays/Relative/lib.ts` instead. */
+  f2Time: number
   startPosition: number
 }
 
