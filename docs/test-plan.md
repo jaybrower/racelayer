@@ -191,6 +191,9 @@ The Settings window uses a left-rail sidebar with six panes: **General**, **Over
 - [ ] **About — version** — RaceLayer version matches `package.json`.
 - [ ] **About — external links** — clicking GitHub repository / Changelog / Bug report / License each opens the user's default browser to the matching URL. The Settings window does not navigate; no new Electron window opens. Verify by clicking each of the four links.
 - [ ] **About — link security** — main process rejects non-http(s) schemes (sanity check: in the dev console run `window.iracingOverlay.openExternal('javascript:alert(1)')` — nothing happens, no error).
+- [ ] **Window size + position persistence** — resize the Settings window to a non-default size, move it to a non-default position, close it (X). Reopen via tray or `Ctrl+Shift+O`: window comes back at the saved size and position. Repeat with a full app quit + relaunch (right-click tray → Quit → launch app again) — bounds still restored.
+- [ ] **Bounds reset on monitor change** — quit the app, change monitor configuration (unplug or rearrange a display), relaunch. Settings window opens at the default 680×560 / OS-default position for the new monitor layout. (Per-monitor-config key, matching the overlay-position pattern.)
+- [ ] **Min-size enforcement** — try to drag a resize edge below the minimum (560×400). Window snaps to the min. Reopen the window — it doesn't come back smaller than the min even if some saved file claimed it should.
 
 ## In-app updater
 

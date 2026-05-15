@@ -83,11 +83,19 @@ function createOverlayWindow(def: OverlayDef): BrowserWindow {
 }
 
 function createSettingsWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 680,
-    height: 560,
-    minWidth: 560,
-    minHeight: 400,
+  // Restore size/position from the last session if we have one for the
+  // current monitor configuration.  Width/height fall back to the hard-coded
+  // defaults; x/y fall back to -1 which Electron treats as "OS-position"
+  // (centred on the primary display on Windows) so a fresh install still
+  // opens nicely centred.
+  const saved = loadSettingsBounds()
+  const width  = Math.max(SETTINGS_MIN_WIDTH,  saved?.width  ?? SETTINGS_DEFAULT_BOUNDS.width)
+  const height = Math.max(SETTINGS_MIN_HEIGHT, saved?.height ?? SETTINGS_DEFAULT_BOUNDS.height)
+  const winOpts: Electron.BrowserWindowConstructorOptions = {
+    width,
+    height,
+    minWidth:  SETTINGS_MIN_WIDTH,
+    minHeight: SETTINGS_MIN_HEIGHT,
     show: false,
     frame: true,
     title: 'RaceLayer — Settings',
@@ -100,7 +108,12 @@ function createSettingsWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
     },
-  })
+  }
+  if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+    winOpts.x = saved.x
+    winOpts.y = saved.y
+  }
+  const win = new BrowserWindow(winOpts)
 
   if (is.dev) {
     win.loadURL(rendererUrl('settings'))
@@ -110,9 +123,24 @@ function createSettingsWindow(): BrowserWindow {
     })
   }
 
-  // Hide instead of destroy so reopening is fast
+  // Persist size + position on every move / resize, debounced so a drag
+  // doesn't fire dozens of disk writes per second.  500ms balances "saved
+  // before the user moves on" against write amplification.
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+  const schedulePersist = () => {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => saveSettingsBounds(win), 500)
+  }
+  win.on('move', schedulePersist)
+  win.on('resize', schedulePersist)
+
+  // Hide instead of destroy so reopening is fast.  Flush any pending bounds
+  // save synchronously here so the final on-screen state is what we persist
+  // — without this, fast-close-after-resize could lose the last move.
   win.on('close', (e) => {
     e.preventDefault()
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
+    saveSettingsBounds(win)
     win.hide()
   })
 
@@ -180,7 +208,19 @@ function buildTrayMenu() {
       },
     },
     { type: 'separator' },
-    { label: 'Quit', click: () => app.exit() },
+    {
+      label: 'Quit',
+      click: () => {
+        // `app.exit()` skips the close-event handlers, so flush the Settings
+        // window bounds here as a belt-and-suspenders — otherwise a resize
+        // followed immediately by tray-Quit can lose up to ~500ms of changes
+        // sitting in the debounce timer.
+        if (settingsWindow && !settingsWindow.isDestroyed()) {
+          saveSettingsBounds(settingsWindow)
+        }
+        app.exit()
+      },
+    },
   ])
 }
 
@@ -276,6 +316,37 @@ function loadWindowPositions(): Record<string, Partial<WindowLayout>> {
   const p = positionsPath()
   if (!existsSync(p)) return {}
   try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return {} }
+}
+
+// ── Settings window bounds persistence ────────────────────────────────────────
+//
+// Mirrors the overlay-position pattern (per-monitor-config file) but for the
+// single Settings window.  Keyed by `monitorKey()` so unplugging or rearranging
+// monitors yields defaults for that new layout instead of restoring an
+// off-screen window.
+
+const SETTINGS_DEFAULT_BOUNDS: WindowLayout = { x: -1, y: -1, width: 680, height: 560 }
+const SETTINGS_MIN_WIDTH = 560
+const SETTINGS_MIN_HEIGHT = 400
+
+function settingsBoundsPath() {
+  return join(positionsDir(), `settings_${monitorKey()}.json`)
+}
+
+function loadSettingsBounds(): Partial<WindowLayout> | null {
+  const p = settingsBoundsPath()
+  if (!existsSync(p)) return null
+  try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return null }
+}
+
+function saveSettingsBounds(win: BrowserWindow) {
+  if (win.isDestroyed()) return
+  const [x, y] = win.getPosition()
+  const [width, height] = win.getSize()
+  const layout: WindowLayout = { x, y, width, height }
+  const dir = positionsDir()
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(settingsBoundsPath(), JSON.stringify(layout, null, 2), 'utf-8')
 }
 
 function resetWindowPositions() {
