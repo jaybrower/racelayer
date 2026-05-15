@@ -756,11 +756,16 @@
 }
 
 .overlayGroupHeader {
-  padding: 18px 0 6px;
+  /* Top padding gives visible breathing room between the previous overlay's
+     last row and this group's title.  Bottom padding is intentionally smaller
+     so the title sits closer to its own rows than to the previous group. */
+  padding: 28px 0 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .overlayGroupHeader:first-child {
+  /* First group (Gauges) sits right under the sticky column header — no
+     prior overlay to separate it from, so collapse to a small top padding. */
   border-top: none;
   padding-top: 6px;
 }
