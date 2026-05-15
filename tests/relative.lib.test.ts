@@ -8,6 +8,14 @@ import {
   computeIRChanges,
   srColor,
   formatGap,
+  carLeftRightSide,
+  CLR_OFF,
+  CLR_CLEAR,
+  CLR_LEFT,
+  CLR_RIGHT,
+  CLR_BOTH,
+  CLR_2_LEFT,
+  CLR_2_RIGHT,
   DEFAULT_REFERENCE_LAP_TIME,
 } from '../src/renderer/src/overlays/Relative/lib'
 import type { CarTelemetry, DriverInfo } from '../src/renderer/src/types/telemetry'
@@ -299,5 +307,44 @@ describe('formatGap', () => {
   it('does not jump to lap delta at exactly 90s (boundary stays on seconds)', () => {
     expect(formatGap(90)).toBe('+90.0')
     expect(formatGap(-90)).toBe('-90.0')
+  })
+})
+
+describe('carLeftRightSide', () => {
+  it('returns null for the off / clear states', () => {
+    expect(carLeftRightSide(CLR_OFF)).toBeNull()
+    expect(carLeftRightSide(CLR_CLEAR)).toBeNull()
+  })
+
+  it('maps single-car-left and double-car-left to "left"', () => {
+    expect(carLeftRightSide(CLR_LEFT)).toBe('left')
+    expect(carLeftRightSide(CLR_2_LEFT)).toBe('left')
+  })
+
+  it('maps single-car-right and double-car-right to "right"', () => {
+    expect(carLeftRightSide(CLR_RIGHT)).toBe('right')
+    expect(carLeftRightSide(CLR_2_RIGHT)).toBe('right')
+  })
+
+  it('maps cars-on-both-sides to "both"', () => {
+    expect(carLeftRightSide(CLR_BOTH)).toBe('both')
+  })
+
+  it('returns null for unrecognised values (forward-compat)', () => {
+    expect(carLeftRightSide(-1)).toBeNull()
+    expect(carLeftRightSide(7)).toBeNull()
+    expect(carLeftRightSide(99)).toBeNull()
+    expect(carLeftRightSide(Number.NaN)).toBeNull()
+  })
+
+  it('uses the canonical irsdk_CarLeftRight enum mapping', () => {
+    // Pinning the wire-format values so a future renumber would fail loudly.
+    expect(CLR_OFF).toBe(0)
+    expect(CLR_CLEAR).toBe(1)
+    expect(CLR_LEFT).toBe(2)
+    expect(CLR_RIGHT).toBe(3)
+    expect(CLR_BOTH).toBe(4)
+    expect(CLR_2_LEFT).toBe(5)
+    expect(CLR_2_RIGHT).toBe(6)
   })
 })

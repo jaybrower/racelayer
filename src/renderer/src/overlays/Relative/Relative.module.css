@@ -88,7 +88,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: 34px 28px 30px 1fr 48px 44px 54px 62px 48px;
+  grid-template-columns: 34px 28px 52px 1fr 48px 44px 54px 62px 48px;
   align-items: center;
   gap: 0;
   padding: 4px 12px;
@@ -125,6 +125,26 @@
   font-size: 10px;
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.carNumLabel {
+  /* The numeric label sits between two always-reserved chevron slots — keeps
+     the row visually anchored even when the chevrons are hidden. */
+}
+
+.proximityChevron {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 0 4px rgba(251, 191, 36, 0.7);
+  width: 9px;
+  display: inline-block;
+  text-align: center;
 }
 
 .name {

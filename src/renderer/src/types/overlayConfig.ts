@@ -60,6 +60,12 @@ export interface RelativeConfig {
      * statistical-noise threshold.
      */
     closingRate:   SessionFlags
+    /**
+     * Proximity side indicator on the player row, driven by the irsdk
+     * `CarLeftRight` field. Renders left/right/both chevrons flanking the
+     * player's car number to signal cars alongside in tight pack racing.
+     */
+    carLeftRight:  SessionFlags
   }
 }
 
@@ -112,6 +118,7 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
       positionDelta: { practice: false, qualifying: false, race: true  },
       irChange:      { practice: false, qualifying: false, race: true  },
       closingRate:   { practice: true,  qualifying: false, race: true  },
+      carLeftRight:  { practice: false, qualifying: false, race: true  },
     },
   },
   pitStrategy: {
@@ -181,6 +188,7 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
         positionDelta: mergeSF(def.relative.columns.positionDelta, storedRelCols.positionDelta),
         irChange:      mergeSF(def.relative.columns.irChange,      storedRelCols.irChange),
         closingRate:   mergeSF(def.relative.columns.closingRate,   storedRelCols.closingRate),
+        carLeftRight:  mergeSF(def.relative.columns.carLeftRight,  storedRelCols.carLeftRight),
       },
     },
     pitStrategy: {

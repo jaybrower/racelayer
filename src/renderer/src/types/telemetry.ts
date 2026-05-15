@@ -69,7 +69,10 @@ export interface IRacingTelemetry {
   tireLR: TireCorner
   tireRR: TireCorner
 
-  /** irsdk_CarLeftRight: 0=clear 1=left 2=right 3=both 4=2left 5=2right 6=2both */
+  /** irsdk_CarLeftRight:
+   *   0 LROff | 1 LRClear | 2 CarLeft | 3 CarRight |
+   *   4 CarLeftRight | 5 2CarsLeft | 6 2CarsRight
+   * See `overlays/Relative/lib.ts` for named constants. */
   carLeftRight: number
 
   /** Traction control — level is the dial setting (0 = off), active = currently intervening */

@@ -166,13 +166,23 @@ export function createMockPoller() {
     const bestLap = playerLaps.length > 0 ? Math.min(...playerLaps) : 0
     const lastLap = playerLaps.length > 0 ? playerLaps[playerLaps.length - 1] : 0
 
-    // Simulate CarLeftRight based on which mock cars are very close
+    // Simulate CarLeftRight using the canonical irsdk_CarLeftRight enum:
+    //   0 LROff | 1 LRClear | 2 CarLeft | 3 CarRight |
+    //   4 CarLeftRight | 5 2CarsLeft | 6 2CarsRight
     const closeCars = carsRaw.filter(c => c.carIdx !== PLAYER_CAR_IDX && Math.abs(c.f2Time) < 1.5)
-    let carLeftRight = 0
-    if (closeCars.length >= 2) carLeftRight = 6        // 2+ on both sides (simplified)
-    else if (closeCars.length === 1) carLeftRight = state.tick % 40 < 20 ? 1 : 2  // alternate L/R
-    else if (carsRaw.some(c => c.carIdx !== PLAYER_CAR_IDX && Math.abs(c.f2Time) < 3)) {
-      carLeftRight = state.tick % 60 < 20 ? 1 : state.tick % 60 < 40 ? 2 : 0
+    let carLeftRight = 1 // LRClear when no cars adjacent
+    if (closeCars.length >= 2) {
+      // Two cars very close → alternate cars-on-both-sides / 2 left / 2 right
+      const phase = state.tick % 60
+      carLeftRight = phase < 20 ? 4 : phase < 40 ? 5 : 6
+    } else if (closeCars.length === 1) {
+      // One car very close → alternate single-car-left / single-car-right
+      carLeftRight = state.tick % 40 < 20 ? 2 : 3
+    } else if (carsRaw.some(c => c.carIdx !== PLAYER_CAR_IDX && Math.abs(c.f2Time) < 3)) {
+      // Nobody at door-to-door range but somebody within 3s → mostly clear,
+      // with brief left / right flickers so the indicator gets exercised.
+      const phase = state.tick % 60
+      carLeftRight = phase < 20 ? 2 : phase < 40 ? 3 : 1
     }
 
     return {

@@ -3,6 +3,13 @@ import { useTelemetry } from '../../contexts/TelemetryContext'
 import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
 import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
+import {
+  CLR_LEFT,
+  CLR_RIGHT,
+  CLR_BOTH,
+  CLR_2_LEFT,
+  CLR_2_RIGHT,
+} from '../Relative/lib'
 import styles from './Radar.module.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -13,14 +20,6 @@ const WINDOW_S = 12
 const PX_PER_S = 12
 const TOTAL_H  = WINDOW_S * 2 * PX_PER_S  // full SVG height
 const SVG_W    = 160                        // SVG viewBox width
-
-/** CarLeftRight enum values */
-const CLR_LEFT  = 1
-const CLR_RIGHT = 2
-const CLR_BOTH  = 3
-const CLR_2L    = 4
-const CLR_2R    = 5
-const CLR_2LR   = 6
 
 // Lane x-centres in the SVG (left | centre | right)
 const LANE = { left: 28, centre: 80, right: 132 }
@@ -85,8 +84,8 @@ export default function Radar() {
   }
 
   const clr = t.carLeftRight
-  const hasLeft  = clr === CLR_LEFT  || clr === CLR_BOTH  || clr === CLR_2L  || clr === CLR_2LR
-  const hasRight = clr === CLR_RIGHT || clr === CLR_BOTH  || clr === CLR_2R  || clr === CLR_2LR
+  const hasLeft  = clr === CLR_LEFT  || clr === CLR_BOTH || clr === CLR_2_LEFT
+  const hasRight = clr === CLR_RIGHT || clr === CLR_BOTH || clr === CLR_2_RIGHT
 
   // Assign lane positions: cars that are very close get left/right based on CarLeftRight signal
   const closeAhead  = nearby.filter(c => c.f2Time < 0  && Math.abs(c.f2Time) < 2)
