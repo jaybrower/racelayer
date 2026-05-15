@@ -68,6 +68,10 @@ export default function Radar() {
 
   if (!config.radar.enabled[sType] && !editMode) return null
 
+  // Hide entirely when the driver is in an iRacing menu (garage / get-in-car /
+  // replay / spectator). Edit mode bypasses this so overlays can be positioned.
+  if (t.connected && !t.isOnTrack && !editMode) return null
+
   const containerClass = [styles.container, editMode ? styles.editMode : ''].join(' ')
 
   if (!t.connected) {
