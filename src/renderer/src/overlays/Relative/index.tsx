@@ -4,6 +4,18 @@ import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
 import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
 import type { CarTelemetry, DriverInfo, SessionType } from '../../types/telemetry'
+import {
+  type GapSample,
+  CLOSING_RATE_WINDOW_SEC,
+  CLOSING_RATE_NOISE_FLOOR,
+  CLOSING_RATE_DISCONTINUITY_SEC,
+  computeRelativeGap,
+  computeClosingRate,
+  computeReferenceLapTime,
+  computeIRChanges,
+  srColor,
+  formatGap,
+} from './lib'
 import styles from './Relative.module.css'
 
 interface RelativeEntry {
@@ -18,114 +30,11 @@ interface RelativeEntry {
   isPlayer: boolean
 }
 
-/** One sample of (sessionTime, gapSeconds) — used by the closing-rate window. */
-interface GapSample { t: number; gap: number }
-
-/** Rolling-window length for closing-rate regression, in seconds.
- *  Long enough to smooth low-precision lapDistPct jitter; short enough to
- *  respond to actual pace changes within a couple of corners. */
-const CLOSING_RATE_WINDOW_SEC = 8
-
-/** Below this magnitude (s/lap) the rate is treated as noise and the cell is blanked. */
-const CLOSING_RATE_NOISE_FLOOR = 0.05
-
-/** Per-frame |Δgap| greater than this (seconds) is treated as a track-position
- *  discontinuity (lapping, teleport on session reset, off-track→on-track jump)
- *  and clears that car's history so the rate isn't poisoned. */
-const CLOSING_RATE_DISCONTINUITY_SEC = 20
-
 const CARS_ABOVE: Record<SessionType, number> = {
   practice: 5, qualifying: 3, race: 5, unknown: 5,
 }
 const CARS_BELOW: Record<SessionType, number> = {
   practice: 5, qualifying: 3, race: 5, unknown: 5,
-}
-
-/**
- * Compute the gap in seconds between a car and the player using track position
- * (CarIdxLapDistPct + CarIdxLap) rather than CarIdxF2Time.
- *
- * CarIdxF2Time is unreliable in practice sessions — it returns 0 for cars that
- * haven't set a lap time and huge values for others.  LapDistPct is always valid
- * and available for every on-track car.
- *
- * Algorithm:
- *   diff = (car.lap + car.lapDistPct) - (playerLap + playerLapDistPct)
- *   Wrap diff to [-0.5, 0.5] (shortest path on the circular track).
- *   gapSeconds = -diff × referenceLapTime
- *     (positive diff → car is ahead → negative gap → displayed with '-')
- */
-function computeRelativeGap(
-  car: CarTelemetry,
-  playerLapDistPct: number,
-  playerLap: number,
-  referenceLapTime: number,
-): number {
-  const diff = (car.lap + car.lapDistPct) - (playerLap + playerLapDistPct)
-  // Wrap to [-0.5, 0.5]: "diff - nearest integer" gives the shortest circular path
-  const wrapped = diff - Math.round(diff)
-  // Positive wrapped → car is further along the track → is ahead → negative gap
-  return -wrapped * referenceLapTime
-}
-
-/**
- * Estimate per-car iRating change using a community-reverse-engineered approximation
- * of iRacing's Elo-style formula.
- *
- * Only meaningful for official race sessions where iRating is on the line — but we
- * compute it here regardless and let the caller decide whether to show it.
- *
- * Formula:
- *   expectedPosition = 1 + Σ P(opponent beats car)
- *   P(opponent beats car) = 1 / (1 + 10^((myIR - opponentIR) / 1000))
- *   iRΔ ≈ round((expectedPos - actualPos) × (200 / N))
- *
- * Returns a Map from carIdx → estimated iRating delta.
- * Returns an empty Map if fewer than 2 rated cars are in the session.
- */
-function computeIRChanges(
-  cars: CarTelemetry[],
-  drivers: DriverInfo[],
-): Map<number, number> {
-  const ratedCars = cars
-    .filter((c) => c.position > 0)
-    .map((c) => ({
-      carIdx:   c.carIdx,
-      position: c.position,
-      iRating:  drivers.find((d) => d.carIdx === c.carIdx)?.iRating ?? 0,
-    }))
-    .filter((c) => c.iRating > 0)
-
-  if (ratedCars.length < 2) return new Map()
-
-  const N = ratedCars.length
-  const result = new Map<number, number>()
-
-  for (const car of ratedCars) {
-    let expectedPos = 1
-    for (const other of ratedCars) {
-      if (other.carIdx === car.carIdx) continue
-      expectedPos += 1 / (1 + Math.pow(10, (car.iRating - other.iRating) / 1000))
-    }
-    result.set(car.carIdx, Math.round((expectedPos - car.position) * (200 / N)))
-  }
-
-  return result
-}
-
-/**
- * Map SR sub-level to a color, independent of license class.
- * Matches the icon tiers so color + icon tell the same story at a glance:
- *   ≤ 2.0  red    — danger / probation risk
- *   ≤ 3.0  yellow — caution
- *   ≤ 4.0  green  — solid
- *   > 4.0  blue   — excellent
- */
-function srColor(sub: number): string {
-  if (sub <= 2.0) return '#f87171'  // red
-  if (sub <= 3.0) return '#fbbf24'  // yellow
-  if (sub <= 4.0) return '#4ade80'  // green
-  return '#38bdf8'                   // blue
 }
 
 /**
@@ -148,79 +57,6 @@ function SafetyBadge({ rating }: { rating: string }) {
   const color = srColor(sub)
   const icon  = sub <= 2.0 ? '!' : sub <= 3.0 ? '▲' : sub <= 4.0 ? '★' : '✦'
   return <span style={{ color }}>{cls}{icon}</span>
-}
-
-/**
- * Closing rate via least-squares linear regression of gap-vs-time over the
- * rolling window.  Output is in seconds-per-second of session time; the caller
- * multiplies by referenceLapTime to convert to s/lap.
- *
- * Linear regression is used instead of a simple endpoint diff so a single
- * jittery sample at either end can't swing the rate.  Returns null if fewer
- * than 3 samples or the time span is < 1s (not enough data to be meaningful).
- */
-function regressGapRate(samples: GapSample[]): number | null {
-  if (samples.length < 3) return null
-  const tSpan = samples[samples.length - 1].t - samples[0].t
-  if (tSpan < 1) return null
-
-  const n = samples.length
-  let sumT = 0, sumG = 0, sumTT = 0, sumTG = 0
-  for (const s of samples) {
-    sumT  += s.t
-    sumG  += s.gap
-    sumTT += s.t * s.t
-    sumTG += s.t * s.gap
-  }
-  const denom = n * sumTT - sumT * sumT
-  if (denom === 0) return null
-  return (n * sumTG - sumT * sumG) / denom  // d(gap)/dt
-}
-
-/**
- * Convert a signed gap-rate (d|gap|/dt) and gap sign into a closing rate
- * expressed in s/lap, where positive means the gap |is shrinking| (closing on
- * the player) and negative means it is growing.
- *
- *   carAhead  (gap < 0): closing when gap is becoming less negative → dGap > 0
- *   carBehind (gap > 0): closing when gap is becoming less positive → dGap < 0
- *
- *   closingRate = -sign(gap) * dGap   (per second)
- */
-function computeClosingRate(
-  samples: GapSample[],
-  currentGap: number,
-  referenceLapTime: number,
-): number | null {
-  const dGapDt = regressGapRate(samples)
-  if (dGapDt === null || referenceLapTime <= 0) return null
-  const sign = currentGap === 0 ? 0 : currentGap > 0 ? 1 : -1
-  const ratePerSec = -sign * dGapDt
-  return ratePerSec * referenceLapTime
-}
-
-/**
- * Best available reference lap time for converting a track-position diff
- * (in laps) into seconds.  Prefers the player's personal best, then last lap,
- * then any other car's best in the session, falling back to 90s.
- */
-function computeReferenceLapTime(
-  telemetry: { lapBestLapTime: number; lapLastLapTime: number },
-  cars: CarTelemetry[],
-): number {
-  if (telemetry.lapBestLapTime > 0) return telemetry.lapBestLapTime
-  if (telemetry.lapLastLapTime > 0) return telemetry.lapLastLapTime
-  const sessionBest = cars
-    .filter((c) => c.bestLapTime > 0)
-    .reduce((best, c) => Math.min(best, c.bestLapTime), Infinity)
-  return Number.isFinite(sessionBest) ? sessionBest : 90
-}
-
-function formatGap(seconds: number): string {
-  const abs = Math.abs(seconds)
-  if (abs > 90) return seconds < 0 ? '-1 Lap' : '+1 Lap'
-  const sign = seconds <= 0 ? '-' : '+'
-  return `${sign}${abs.toFixed(1)}`
 }
 
 export default function Relative() {
