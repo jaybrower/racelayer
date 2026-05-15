@@ -31,6 +31,52 @@ export const CLOSING_RATE_MIN_SPAN_SEC = 1
 /** Fallback lap time when no car in the session has produced one yet. */
 export const DEFAULT_REFERENCE_LAP_TIME = 90
 
+// ── CarLeftRight (irsdk_CarLeftRight enum) ───────────────────────────────────
+//
+// Values come straight from the iRacing SDK header — do NOT reinterpret.
+// `carLeftRight` is a player-only field: a single value describing which
+// cars are alongside the *player's* car.
+//
+//   0 LROff         — proximity check is off (off-track / replay / etc.)
+//   1 LRClear       — no cars alongside
+//   2 CarLeft       — one car to the left
+//   3 CarRight      — one car to the right
+//   4 CarLeftRight  — cars on both sides
+//   5 2CarsLeft     — two cars to the left
+//   6 2CarsRight    — two cars to the right
+export const CLR_OFF       = 0
+export const CLR_CLEAR     = 1
+export const CLR_LEFT      = 2
+export const CLR_RIGHT     = 3
+export const CLR_BOTH      = 4
+export const CLR_2_LEFT    = 5
+export const CLR_2_RIGHT   = 6
+
+/** Which side(s) carry adjacent cars, or `null` when there are none / off.
+ *  Doubles (5/6) collapse to the same side — the count is intentionally
+ *  not exposed; the UI just needs to know which side to highlight. */
+export type ProximitySide = 'left' | 'right' | 'both'
+
+/**
+ * Translate the raw `carLeftRight` enum into a side classification suitable
+ * for the side-indicator UI.  Returns `null` for `LROff` / `LRClear` and any
+ * unrecognised value (forward-compat against future enum additions).
+ */
+export function carLeftRightSide(value: number): ProximitySide | null {
+  switch (value) {
+    case CLR_LEFT:
+    case CLR_2_LEFT:
+      return 'left'
+    case CLR_RIGHT:
+    case CLR_2_RIGHT:
+      return 'right'
+    case CLR_BOTH:
+      return 'both'
+    default:
+      return null
+  }
+}
+
 /**
  * Compute the gap in seconds between a car and the player using track position
  * (`CarIdxLapDistPct + CarIdxLap`) rather than `CarIdxF2Time`.

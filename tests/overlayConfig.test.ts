@@ -43,6 +43,11 @@ describe('mergeWithDefaults', () => {
     expect(merged.relative.columns.closingRate).toEqual(
       DEFAULT_OVERLAY_CONFIG.relative.columns.closingRate,
     )
+    // carLeftRight is the newest column — pre-existing configs must inherit
+    // its default rather than ending up `undefined`.
+    expect(merged.relative.columns.carLeftRight).toEqual(
+      DEFAULT_OVERLAY_CONFIG.relative.columns.carLeftRight,
+    )
     expect(merged.pitStrategy).toEqual(DEFAULT_OVERLAY_CONFIG.pitStrategy)
   })
 

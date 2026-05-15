@@ -111,6 +111,16 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 - [ ] **Empty history** — first ~8 seconds after a car appears on track, its closing-rate cell is blank.
 - [ ] **Below noise floor** — cars holding station should show a blank cell, not flickering ±0.02 numbers.
 
+#### CarLeftRight side indicator
+- [ ] **Player row only** — chevrons (`◀ #N ▶`) appear flanking the player's car number; no chevrons render on any other row.
+- [ ] **Clear / off** — no cars alongside → both chevrons hidden (cell width does not jitter).
+- [ ] **One car on left** — left chevron lights amber, right hidden.
+- [ ] **One car on right** — right chevron lights amber, left hidden.
+- [ ] **Cars on both sides** — both chevrons lit.
+- [ ] **Two-cars-side** — the value collapses to the matching side (no separate "double" visual; that's intentional).
+- [ ] **Pit mode** — chevrons suppressed entirely once the player enters pit (column hidden along with closing-rate).
+- [ ] **Settings toggle** — turn "Side Indicator" off in Settings → chevrons disappear immediately; on → they return on the next adjacent-car event.
+
 #### AI and pace cars
 - [ ] AI cars appear in the list with their real names and iRating (don't filter them out).
 - [ ] Pace car does NOT appear in the list.
@@ -151,6 +161,11 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 - [ ] **Surface temps** for cars that expose `LFtempL`-style variables (live, fast-changing).
 - [ ] **Carcass temps** for cars that don't expose surface — values change slowly, console logs `tireTempMode = 'carcass'` at connect time.
 - [ ] Auto-hide: load a car the SDK reports no tire temps for, with `hideUnsupportedElements: true`. Tire Temps overlay disappears.
+
+### Radar
+
+- [ ] **In a live iRacing pack** — when a car comes alongside, the matching edge of the Radar lights amber. (Pre-v0.1.4 this was off by one: "clear" rendered as "car on left". Verify in a real session, not mock data.)
+- [ ] **Mock data sanity** — in dev mode, the side-edge highlight alternates between left and right as the mock cycles `CarLeftRight` through 2 → 3 → 4 → 5 → 6.
 
 ---
 

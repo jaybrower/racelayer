@@ -6,6 +6,7 @@ import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
 import type { CarTelemetry, DriverInfo, SessionType } from '../../types/telemetry'
 import {
   type GapSample,
+  type ProximitySide,
   CLOSING_RATE_WINDOW_SEC,
   CLOSING_RATE_NOISE_FLOOR,
   CLOSING_RATE_DISCONTINUITY_SEC,
@@ -13,6 +14,7 @@ import {
   computeClosingRate,
   computeReferenceLapTime,
   computeIRChanges,
+  carLeftRightSide,
   srColor,
   formatGap,
 } from './lib'
@@ -74,6 +76,7 @@ export default function Relative() {
     showDelta:        cols.positionDelta[sType],
     showIRChange:     cols.irChange[sType],
     showClosingRate:  cols.closingRate[sType],
+    showCarLeftRight: cols.carLeftRight[sType],
     carsAbove:        CARS_ABOVE[sType],
     carsBelow:        CARS_BELOW[sType],
   }
@@ -84,6 +87,14 @@ export default function Relative() {
   // math is meaningless.  We pivot to leaderboard-position sorting in that case.
   const playerCar = telemetry.cars.find((c) => c.carIdx === telemetry.playerCarIdx)
   const playerInPit = !!playerCar?.inPit
+
+  // Proximity side from CarLeftRight — applies only to the player row.
+  // Suppressed while in pit (no adjacent-car concept) and when the column
+  // toggle is off for this session type.
+  const proximitySide: ProximitySide | null =
+    cfg.showCarLeftRight && !playerInPit
+      ? carLeftRightSide(telemetry.carLeftRight)
+      : null
 
   // Per-car rolling gap history for closing-rate computation.  Lives in a ref
   // so it survives renders without re-allocation; updated in useEffect once
@@ -242,7 +253,13 @@ export default function Relative() {
       ) : (
         <div className={styles.rows}>
           {visibleEntries.map((entry) => (
-            <DriverRow key={entry.car.carIdx} entry={entry} cfg={cfg} pitMode={playerInPit} />
+            <DriverRow
+              key={entry.car.carIdx}
+              entry={entry}
+              cfg={cfg}
+              pitMode={playerInPit}
+              proximitySide={entry.isPlayer ? proximitySide : null}
+            />
           ))}
         </div>
       )}
@@ -254,6 +271,7 @@ function DriverRow({
   entry,
   cfg,
   pitMode,
+  proximitySide,
 }: {
   entry: RelativeEntry
   cfg: {
@@ -262,10 +280,14 @@ function DriverRow({
     showDelta: boolean
     showIRChange: boolean
     showClosingRate: boolean
+    showCarLeftRight: boolean
   }
   /** When true, the player is in pit — gap is meaningless so render '—' in
    *  the gap column, and hide the closing-rate cell entirely. */
   pitMode: boolean
+  /** Which side(s) have cars alongside the player, or null when none / not
+   *  the player's row. Always null for non-player rows. */
+  proximitySide: ProximitySide | null
 }) {
   const { car, driver, gapSeconds, positionDelta, irChange, closingRate, isPlayer } = entry
 
@@ -333,7 +355,32 @@ function DriverRow({
         {deltaText}
       </span>
 
-      <span className={styles.carNum}>#{driver.carNumber}</span>
+      <span className={styles.carNum}>
+        {/* Side-indicator chevrons flank the car number on the player row only.
+            Chevrons stay reserved (visibility:hidden) so the cell width never
+            jitters when proximity flips on/off mid-corner. */}
+        <span
+          className={styles.proximityChevron}
+          style={{
+            visibility:
+              proximitySide === 'left' || proximitySide === 'both' ? 'visible' : 'hidden',
+          }}
+          aria-hidden="true"
+        >
+          ◀
+        </span>
+        <span className={styles.carNumLabel}>#{driver.carNumber}</span>
+        <span
+          className={styles.proximityChevron}
+          style={{
+            visibility:
+              proximitySide === 'right' || proximitySide === 'both' ? 'visible' : 'hidden',
+          }}
+          aria-hidden="true"
+        >
+          ▶
+        </span>
+      </span>
 
       <span
         className={styles.name}
