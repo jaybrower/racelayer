@@ -14,12 +14,17 @@ import styles from './Radar.module.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** How many seconds of the track to show on each side of the player */
-const WINDOW_S = 12
+/** How many seconds of the track to show on each side of the player.
+ *  Tight ±1s window keeps the focus on door-to-door battles; cars further
+ *  out are best seen via the Relative overlay. */
+const WINDOW_S = 1
 /** Pixels per second on the display */
-const PX_PER_S = 12
+const PX_PER_S = 100
 const TOTAL_H  = WINDOW_S * 2 * PX_PER_S  // full SVG height
 const SVG_W    = 160                        // SVG viewBox width
+/** Grid-line cadence in seconds.  At a ±1s window we want a half-second
+ *  reference instead of the previous 1s gridlines + 3s labels. */
+const GRID_STEP_S = 0.5
 
 // Lane x-centres in the SVG (left | centre | right)
 const LANE = { left: 28, centre: 80, right: 132 }
@@ -124,20 +129,23 @@ export default function Radar() {
           <line x1={SVG_W / 2} y1={0} x2={SVG_W / 2} y2={TOTAL_H}
             stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
 
-          {/* ── Time grid lines every 3 s, labelled ── */}
-          {Array.from({ length: WINDOW_S * 2 + 1 }, (_, i) => {
-            const y = i * PX_PER_S
-            const label = i - WINDOW_S
-            const showLabel = label !== 0 && label % 3 === 0
+          {/* ── Time grid lines every GRID_STEP_S, integer-second lines emphasised
+                 and labelled.  At a ±1s window this draws half-second tick marks
+                 with bold lines + labels at -1s, 0, +1s. ── */}
+          {Array.from({ length: Math.round((WINDOW_S * 2) / GRID_STEP_S) + 1 }, (_, i) => {
+            const t = -WINDOW_S + i * GRID_STEP_S
+            const y = (t + WINDOW_S) * PX_PER_S
+            const isInteger = Math.abs(t - Math.round(t)) < 1e-6
+            const showLabel = isInteger && t !== 0
             return (
               <g key={i}>
                 <line x1={0} y1={y} x2={SVG_W} y2={y}
-                  stroke={label % 3 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'}
+                  stroke={isInteger ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'}
                   strokeWidth="1" />
                 {showLabel && (
                   <text x={4} y={y + 9} fontSize="8"
                     fill="rgba(255,255,255,0.2)" fontFamily="system-ui">
-                    {label > 0 ? `+${label}` : label}s
+                    {t > 0 ? `+${t}` : t}s
                   </text>
                 )}
               </g>

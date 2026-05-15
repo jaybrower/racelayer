@@ -344,7 +344,7 @@ app.whenReady().then(async () => {
     // for a proper proximity display; revisit positional data in a future
     // release. Default-disabled in `RadarConfig.enabled` so the window stays
     // empty/hidden until the user opts in via Settings.
-    { name: 'radar', route: 'radar', width: 180, height: 320, ...defaults.radar },
+    { name: 'radar', route: 'radar', width: 180, height: 240, ...defaults.radar },
   ]
 
   for (const def of OVERLAYS) {
