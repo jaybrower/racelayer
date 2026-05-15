@@ -1,0 +1,76 @@
+# Require Release Notes
+# ────────────────────
+# Fails CI on any PR targeting a `release/v*` branch unless the corresponding
+# `release-notes/vX.Y.Z.md` file has been modified in the PR diff.
+#
+# Bypass: apply the `no-release-notes` label to the PR. The workflow re-runs
+# on label add/remove, so the failing check turns green as soon as the label
+# is applied — no force-push needed.
+#
+# See CLAUDE.md (branch policy) and issue #6 for the policy this enforces.
+
+name: Require Release Notes
+
+on:
+  pull_request:
+    branches:
+      - 'release/v*'
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    name: Release notes touched
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify release-notes file is modified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          REPO: ${{ github.repository }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+
+          # Bypass label check
+          if echo "$PR_LABELS" | jq -e 'any(. == "no-release-notes")' >/dev/null; then
+            echo "::notice::PR has the 'no-release-notes' label — bypassing release-notes requirement."
+            exit 0
+          fi
+
+          # Derive the expected release-notes path from the base branch name.
+          #   release/v0.1.4  →  release-notes/v0.1.4.md
+          version="${BASE_REF#release/v}"
+          if [ "$version" = "$BASE_REF" ]; then
+            echo "::error::Base branch '$BASE_REF' doesn't match expected pattern 'release/v*'."
+            exit 1
+          fi
+          expected="release-notes/v${version}.md"
+
+          # Get the list of files changed in this PR via the GitHub API.
+          changed=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json files --jq '.files[].path')
+
+          if echo "$changed" | grep -Fxq "$expected"; then
+            echo "::notice::Release notes file '$expected' is updated in this PR. ✓"
+            exit 0
+          fi
+
+          # No match — emit a helpful failure with both step-summary and inline annotation.
+          {
+            echo "## ❌ Release notes update required"
+            echo ""
+            echo "This PR targets \`$BASE_REF\` but does not modify \`$expected\`."
+            echo ""
+            echo "The repository requires every release-branch PR to touch the corresponding release-notes file so the cumulative changelog stays accurate as features land."
+            echo ""
+            echo "### Two ways to satisfy this check"
+            echo "1. **Add a bullet to \`$expected\`** describing the user-facing change (or note it under the \`Internal\` heading). Preferred — keeps the changelog complete."
+            echo "2. **Apply the \`no-release-notes\` label** to this PR for pure refactors / behaviour-preserving changes where \`Internal: (none)\` is the honest answer. The check re-runs on label add and will turn green."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error file=${expected}::Add a bullet to ${expected} describing this PR's change, or apply the 'no-release-notes' label."
+          exit 1

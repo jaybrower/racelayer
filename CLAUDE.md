@@ -57,6 +57,8 @@
 > ```
 >
 > **Branch naming:** keep names short and conventional-commits-aligned — `feat/closing-rate`, `fix/pit-mode-gap`, `chore/branch-policy-update`. Release branches always carry the `v` prefix to match git tags: `release/v0.1.3`, never `release/0.1.3`.
+>
+> **Release-notes enforcement:** Every PR targeting a `release/v*` branch must modify the corresponding `release-notes/vX.Y.Z.md` file. Enforced by the `Require Release Notes` GitHub Action (`.github/workflows/require-release-notes.yml`). Bypass with the `no-release-notes` label on the PR for pure refactors or behaviour-preserving changes where `Internal: (none)` is the honest answer — the workflow re-runs on label add/remove, so applying the label turns the failing check green without a force-push.
 
 ## What This Is
 
