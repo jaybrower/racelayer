@@ -198,12 +198,33 @@ function createTray() {
   tray.on('click', openSettings)
 }
 
-function broadcastToAll(channel: string, data: unknown) {
+/** Send an IPC event to every overlay window — NOT the Settings window.
+ *  Use this for high-frequency, overlay-specific channels like
+ *  `telemetry:update` (~10 Hz) and `overlay:editMode`, where the Settings
+ *  window neither subscribes nor benefits and the extra IPC traffic is waste. */
+function broadcastToOverlays(channel: string, data: unknown) {
   windows.forEach((win) => {
     if (!win.isDestroyed()) {
       win.webContents.send(channel, data)
     }
   })
+}
+
+/** Send an IPC event to every window — overlays AND the Settings window.
+ *  Use this for *state-change* channels that the Settings UI cares about:
+ *  `previewMode:changed`, `config:changed`, `update:status`, etc.  Without
+ *  this fan-out, the Settings pane never sees changes initiated from the
+ *  tray menu (e.g. toggling Preview Mode from the Windows tray).
+ *
+ *  Original `broadcastToAll` did NOT include the Settings window, so any
+ *  state change driven from the tray or from the main process never
+ *  propagated to Settings — visible to the user as Preview Mode getting
+ *  out of sync between tray and Settings. */
+function broadcastToAll(channel: string, data: unknown) {
+  broadcastToOverlays(channel, data)
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send(channel, data)
+  }
 }
 
 // ── Window position persistence (per monitor configuration) ──────────────────
@@ -396,7 +417,7 @@ app.whenReady().then(async () => {
       windows.forEach((win) => {
         win.setIgnoreMouseEvents(!editMode, { forward: true })
       })
-      broadcastToAll('overlay:editMode', editMode)
+      broadcastToOverlays('overlay:editMode', editMode)
       // Persist positions when the user locks layout
       if (!editMode) saveWindowPositions()
     },
@@ -406,7 +427,7 @@ app.whenReady().then(async () => {
   await startTelemetryPolling((telemetry: IRacingTelemetry) => {
     setOverlaysVisible(telemetry.connected)
     if (telemetry.connected) {
-      broadcastToAll('telemetry:update', telemetry)
+      broadcastToOverlays('telemetry:update', telemetry)
     }
   })
 })

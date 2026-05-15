@@ -186,6 +186,7 @@ The Settings window uses a left-rail sidebar with six panes: **General**, **Over
 - [ ] **Shortcuts** — change a shortcut to a different modifier combo (e.g. `Ctrl+Alt+L`). Verify the new combo works and the old combo does NOT.
 - [ ] **Shortcuts — conflict detection** — try to bind two actions to the same combo. The UI should refuse / warn.
 - [ ] **Preview Mode** — toggle on: overlays receive mock data immediately. Pick a session type (practice / qualifying / race); the Relative overlay updates its column visibility accordingly within a second or two.
+- [ ] **Preview Mode — tray ↔ Settings sync** — open Settings, navigate to Preview Mode. Right-click the tray icon and toggle "Preview Mode" / change session type from the tray menu. The Settings pane updates within a frame to reflect the new state (toggle and session-type radio). Toggle from Settings: the tray menu's checkmark updates the next time it's opened. This is the regression bug noticed during v0.1.5 testing — `broadcastToAll` previously skipped the Settings window so tray-driven changes never reached it.
 - [ ] **Updates** — current version badge shows the package.json version. (See **Updater** section below for the rest.)
 - [ ] **About — version** — RaceLayer version matches `package.json`.
 - [ ] **About — external links** — clicking GitHub repository / Changelog / Bug report / License each opens the user's default browser to the matching URL. The Settings window does not navigate; no new Electron window opens. Verify by clicking each of the four links.

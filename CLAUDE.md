@@ -217,7 +217,7 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 2. `iracingSdk.ts` reads iRacing's Windows named memory-mapped file (`Local\IRSDKMemMapFileName`) using koffi FFI calls to `OpenFileMapping` / `MapViewOfFile`
 3. Parses variable headers, builds `varMap`, reads typed values at byte offsets
 4. Constructs `IRacingTelemetry` and passes to the callback in `index.ts`
-5. `index.ts` calls `broadcastToAll('telemetry:update', telemetry)` to all overlay windows
+5. `index.ts` calls `broadcastToOverlays('telemetry:update', telemetry)` to all overlay windows. (Two fan-out helpers exist in main: `broadcastToOverlays` for high-frequency overlay-only channels like `telemetry:update` / `overlay:editMode`, and `broadcastToAll` which additionally sends to the Settings window for state-change channels like `previewMode:changed` / `config:changed` / `update:status`. The Settings UI subscribes to the latter and would miss tray-driven state changes if they fanned through `broadcastToOverlays`.)
 6. `TelemetryContext.tsx` in the renderer listens and stores in React state
 
 Preview mode bypasses iRacing entirely — `mockTelemetry.ts` generates simulated data.
