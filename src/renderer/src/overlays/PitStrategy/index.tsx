@@ -3,29 +3,13 @@ import { useTelemetry } from '../../contexts/TelemetryContext'
 import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
 import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
+import {
+  type LapRecord,
+  computeStintMetrics,
+  computeFuelStats,
+  formatLapTime,
+} from './lib'
 import styles from './PitStrategy.module.css'
-
-const LAP_TIME_ESTIMATE = 92   // seconds — used only as last-resort estimate on lap 1
-// Minimum fuelUsePerHour (L/hr) to consider the car actually moving.
-// At idle the engine burns ~1–2 L/hr which would produce absurdly high laps-remaining.
-const MIN_DRIVING_FUEL_RATE = 5
-
-function formatTime(s: number): string {
-  if (s <= 0) return '--:--.---'
-  const m = Math.floor(s / 60)
-  const sec = (s % 60).toFixed(3).padStart(6, '0')
-  return `${m}:${sec}`
-}
-
-interface LapRecord {
-  lap: number
-  time: number
-  /** True when the player was on pit road at any point during this lap — i.e.
-   *  it's an out-lap, in-lap, or a lap that included a full pit stop.  These
-   *  laps are excluded from tire-deg analysis because their times don't reflect
-   *  tire wear (partial distance, cold tires, refuel delta, etc.). */
-  pitAffected: boolean
-}
 
 export default function PitStrategy() {
   const t = useTelemetry()
@@ -108,79 +92,18 @@ export default function PitStrategy() {
   }, [t.lap, t.fuelLevel, t.connected])
 
   // ── Derived stats ─────────────────────────────────────────────────────────────
+  // All pure logic lives in `./lib` so it can be unit-tested.  This memo just
+  // pipes the current refs through those functions on each render.
   const stats = useMemo(() => {
-    const lapHistory = lapHistoryRef.current
-    const samples = fuelPerLapSamplesRef.current
-
-    // Priority:
-    //  1. Rolling average of measured per-lap fuel (most accurate)
-    //  2. Live fuelUsePerHour × actual lap time (reasonable while actively driving)
-    //  3. Show '--' — never show a nonsense number when idle/stopped
-    let fuelPerLap = 0
-    let hasReliableEstimate = false
-
-    if (samples.length > 0) {
-      fuelPerLap = samples.reduce((a, b) => a + b, 0) / samples.length
-      hasReliableEstimate = true
-    } else if (t.fuelUsePerHour > MIN_DRIVING_FUEL_RATE) {
-      const lapTime = t.lapLastLapTime > 0 ? t.lapLastLapTime : LAP_TIME_ESTIMATE
-      fuelPerLap = t.fuelUsePerHour * (lapTime / 3600)
-      hasReliableEstimate = true
-    }
-
-    const lapsOnFuel = hasReliableEstimate && fuelPerLap > 0
-      ? t.fuelLevel / fuelPerLap
-      : 0
-
-    const pitLap = lapsOnFuel > 0 ? Math.floor(t.lap + lapsOnFuel - 0.5) : null
-
-    // ── Tire deg: stint-scoped pace trend ──────────────────────────────────────
-    // A "stint" is the contiguous run of clean flying laps since the most recent
-    // pit-affected lap (out-lap, in-lap, or full pit stop).  Walk backwards from
-    // the end of history; everything after the last pitAffected lap is the
-    // current stint.  Session-best is *not* the reference here — only this
-    // stint's data matters for tire wear, since a fresh-tire run an hour ago
-    // tells us nothing about the current set.
-    const currentStint: LapRecord[] = []
-    for (let i = lapHistory.length - 1; i >= 0; i--) {
-      if (lapHistory[i].pitAffected) break
-      currentStint.unshift(lapHistory[i])
-    }
-
-    const lastLap = currentStint.length > 0 ? currentStint[currentStint.length - 1] : null
-
-    // Stint best — fastest lap within the current stint.  Equals lastLap on a
-    // 1-lap stint or whenever the latest lap is the new best.
-    const stintBest = currentStint.length > 0
-      ? currentStint.reduce((best, r) => r.time < best.time ? r : best)
-      : null
-
-    // ── Headline trend: last lap vs avg of the up-to-3 prior stint laps ──────
-    // Directional indicator — "am I getting faster or slower right now?"
-    // After s1: null (no prior laps).  After s2: 1-sample comparison (muted in
-    // UI).  After s4+: full 3-lap window.  A bad lap in the prior window will
-    // *help* the next lap's trend (inflated baseline → next lap looks fast);
-    // this is a known behaviour, not a bug — it self-corrects as the outlier
-    // rolls out of the window.
-    const priorLaps = currentStint.slice(-4, -1)
-    const trendDelta = lastLap && priorLaps.length > 0
-      ? lastLap.time - (priorLaps.reduce((s, r) => s + r.time, 0) / priorLaps.length)
-      : null
-    const trendMature = priorLaps.length >= 3
-
-    // ── Stint-best delta: last lap vs the stint's fastest lap ────────────────
-    // "How off-peak am I?" — always ≥ 0, equals 0 when the latest lap *is*
-    // the stint best.
-    const stintBestDelta = lastLap && stintBest
-      ? lastLap.time - stintBest.time
-      : null
-
-    return {
-      fuelPerLap, lapsOnFuel, hasReliableEstimate, pitLap,
-      currentStint, lastLap, stintBest,
-      trendDelta, trendMature, priorCount: priorLaps.length,
-      stintBestDelta,
-    }
+    const fuel = computeFuelStats({
+      samples: fuelPerLapSamplesRef.current,
+      fuelLevel: t.fuelLevel,
+      fuelUsePerHour: t.fuelUsePerHour,
+      currentLap: t.lap,
+      lapLastLapTime: t.lapLastLapTime,
+    })
+    const stint = computeStintMetrics(lapHistoryRef.current)
+    return { ...fuel, ...stint }
   }, [t.fuelLevel, t.fuelUsePerHour, t.lap, t.lapLastLapTime])
 
   const editMode = useEditMode()
@@ -263,7 +186,7 @@ export default function PitStrategy() {
           {/* Stint best lap */}
           <div className={styles.lapRow}>
             <span className={styles.lapNum}>L{stats.stintBest.lap}</span>
-            <span className={styles.lapTime}>{formatTime(stats.stintBest.time)}</span>
+            <span className={styles.lapTime}>{formatLapTime(stats.stintBest.time)}</span>
             <span className={styles.bestBadge}>BEST</span>
           </div>
 
@@ -271,7 +194,7 @@ export default function PitStrategy() {
           {stats.lastLap !== stats.stintBest && (
             <div className={styles.lapRow}>
               <span className={styles.lapNum}>L{stats.lastLap.lap}</span>
-              <span className={styles.lapTime}>{formatTime(stats.lastLap.time)}</span>
+              <span className={styles.lapTime}>{formatLapTime(stats.lastLap.time)}</span>
               <span className={styles.lastBadge}>LAST</span>
             </div>
           )}
