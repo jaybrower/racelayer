@@ -11,8 +11,27 @@ export interface GlobalConfig {
   hideUnsupportedElements: boolean
 }
 
+/** Source for the RPM-bar "shift now" flash trigger. */
+export type ShiftPointSource = 'sdk' | 'percent'
+
+export interface ShiftPointConfig {
+  /** `'sdk'` (default) — use iRacing's `ShiftIndicatorPct` field when available,
+   *  fall back to `flashThresholdPct` when the SDK doesn't expose it (older
+   *  builds, some cars).
+   *  `'percent'` — ignore the SDK shift-light data and always trigger the
+   *  flash from `flashThresholdPct` × `playerCarRedLine`. */
+  source: ShiftPointSource
+  /** Fraction of redline (0-1) that triggers the flash zone — used directly
+   *  in `'percent'` mode, and as the SDK fallback in `'sdk'` mode. */
+  flashThresholdPct: number
+}
+
 export interface GaugesConfig {
   enabled: SessionFlags
+  /** RPM bar: where the flash zone kicks in.  Color zones below the flash
+   *  threshold are always derived from rpmPct so the colour rhythm stays
+   *  consistent regardless of source — only the flash trigger changes. */
+  shiftPoint: ShiftPointConfig
   elements: {
     rpmBar:     SessionFlags
     inputTrace: SessionFlags
@@ -93,6 +112,10 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
   },
   gauges: {
     enabled: { practice: true, qualifying: true, race: true },
+    shiftPoint: {
+      source: 'sdk',
+      flashThresholdPct: 0.97,
+    },
     elements: {
       rpmBar:     { practice: true,  qualifying: true,  race: true  },
       inputTrace: { practice: true,  qualifying: true,  race: false },
@@ -149,6 +172,7 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
   const storedGlobal   = (s.global      ?? {}) as Record<string, unknown>
   const storedGauges   = (s.gauges      ?? {}) as Record<string, unknown>
   const storedEl       = (storedGauges.elements ?? {}) as Record<string, unknown>
+  const storedShift    = (storedGauges.shiftPoint ?? {}) as Record<string, unknown>
   const storedRel      = (s.relative    ?? {}) as Record<string, unknown>
   const storedRelCols  = (storedRel.columns    ?? {}) as Record<string, unknown>
   const storedPit      = (s.pitStrategy ?? {}) as Record<string, unknown>
@@ -163,6 +187,23 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
     },
     gauges: {
       enabled: mergeSF(def.gauges.enabled, storedGauges.enabled),
+      shiftPoint: {
+        // Validate `source` so a hand-edited config can't poison the union type.
+        source:
+          storedShift.source === 'percent' || storedShift.source === 'sdk'
+            ? storedShift.source
+            : def.gauges.shiftPoint.source,
+        // Clamp threshold to [0.5, 1.0] — below 0.5 the bar would flash from
+        // ~6500 RPM on a Porsche Cup which is useless; above 1.0 means past
+        // redline which the SDK should already be handling.
+        flashThresholdPct:
+          typeof storedShift.flashThresholdPct === 'number' &&
+          isFinite(storedShift.flashThresholdPct) &&
+          storedShift.flashThresholdPct >= 0.5 &&
+          storedShift.flashThresholdPct <= 1.0
+            ? storedShift.flashThresholdPct
+            : def.gauges.shiftPoint.flashThresholdPct,
+      },
       elements: {
         rpmBar:     mergeSF(def.gauges.elements.rpmBar,     storedEl.rpmBar),
         inputTrace: mergeSF(def.gauges.elements.inputTrace, storedEl.inputTrace),

@@ -130,6 +130,14 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 ### Gauges
 
 - [ ] RPM bar tracks engine RPM smoothly, no jumpy redraws.
+- [ ] **RPM bar color zones** — slowly bring revs up from idle. Bar transitions through cyan (low) → green (mid, ~65%) → yellow (high, ~80%) → red (redline, ~90%). Color steps are instant, not blended.
+- [ ] **RPM bar flash (SDK mode, default)** — in a car that exposes `ShiftIndicatorPct` (most paid cars do), the bar flashes red ↔ fuchsia at the per-car shift point — should match where iRacing's own shift lights fully light. Flash stops the instant revs drop after a shift.
+- [ ] **RPM bar flash (percentage mode)** — Settings → Overlays → RPM Bar → "Percentage only". Verify the bar flashes at the configured threshold (default 97% of redline) regardless of what the SDK reports.
+- [ ] **RPM bar flash (SDK fallback)** — find a car that doesn't expose `ShiftIndicatorPct` (rare; some older content). Bar should still flash, using the percentage threshold as the fallback.
+- [ ] **RPM bar threshold change** — Settings → Overlays → RPM Bar → set "Flash at" to 90%. Verify the flash kicks in noticeably earlier on the same car. Restart the app; setting persists.
+- [ ] **RPM bar threshold input bounds** — try typing 30% or 120%; the input clamps to [50, 100]. Saved config never produces an out-of-range value.
+- [ ] **RPM bar across cars with very different redlines** — drive a Porsche Cup (~9400 RPM redline), then a formula car (~12000+ RPM redline). Color rhythm and flash should both work correctly on each.
+- [ ] **Flash performance** — confirm the flash uses CSS keyframes by opening DevTools → Performance, recording 5 seconds with the bar flashing, and verifying there are no JS animation ticks competing with the ~10 Hz telemetry-update cadence.
 - [ ] Input trace shows ~15s of throttle (green) + brake (red).
 - [ ] Gear shows `R`, `N`, or a number; `R` for reverse, `N` for neutral.
 - [ ] Speed shows MPH with one decimal.

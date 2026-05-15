@@ -113,4 +113,65 @@ describe('mergeWithDefaults', () => {
     const merged = mergeWithDefaults(stored)
     expect(merged.global.hideUnsupportedElements).toBe(false)
   })
+
+  // ── gauges.shiftPoint (added in v0.1.5) ────────────────────────────────────
+  describe('gauges.shiftPoint', () => {
+    it('fills in defaults when omitted (forward-compat from older configs)', () => {
+      const stored = { gauges: { enabled: { practice: true, qualifying: true, race: true } } }
+      const merged = mergeWithDefaults(stored)
+      expect(merged.gauges.shiftPoint).toEqual(DEFAULT_OVERLAY_CONFIG.gauges.shiftPoint)
+    })
+
+    it('preserves valid stored values', () => {
+      const stored = {
+        gauges: {
+          shiftPoint: { source: 'percent', flashThresholdPct: 0.92 },
+        },
+      }
+      const merged = mergeWithDefaults(stored)
+      expect(merged.gauges.shiftPoint.source).toBe('percent')
+      expect(merged.gauges.shiftPoint.flashThresholdPct).toBe(0.92)
+    })
+
+    it('rejects an invalid source string and falls back to default', () => {
+      const stored = { gauges: { shiftPoint: { source: 'nonsense', flashThresholdPct: 0.95 } } }
+      const merged = mergeWithDefaults(stored)
+      expect(merged.gauges.shiftPoint.source).toBe(DEFAULT_OVERLAY_CONFIG.gauges.shiftPoint.source)
+      // Threshold is independently valid so it survives.
+      expect(merged.gauges.shiftPoint.flashThresholdPct).toBe(0.95)
+    })
+
+    it('clamps an out-of-range threshold to the default', () => {
+      const tooLow  = mergeWithDefaults({ gauges: { shiftPoint: { source: 'sdk', flashThresholdPct: 0.1 } } })
+      const tooHigh = mergeWithDefaults({ gauges: { shiftPoint: { source: 'sdk', flashThresholdPct: 1.5 } } })
+      expect(tooLow.gauges.shiftPoint.flashThresholdPct).toBe(DEFAULT_OVERLAY_CONFIG.gauges.shiftPoint.flashThresholdPct)
+      expect(tooHigh.gauges.shiftPoint.flashThresholdPct).toBe(DEFAULT_OVERLAY_CONFIG.gauges.shiftPoint.flashThresholdPct)
+    })
+
+    it('rejects a non-finite threshold and falls back to the default', () => {
+      const merged = mergeWithDefaults({
+        gauges: { shiftPoint: { source: 'sdk', flashThresholdPct: NaN } },
+      })
+      expect(merged.gauges.shiftPoint.flashThresholdPct).toBe(
+        DEFAULT_OVERLAY_CONFIG.gauges.shiftPoint.flashThresholdPct,
+      )
+    })
+
+    it('rejects a non-numeric threshold without throwing', () => {
+      const merged = mergeWithDefaults({
+        gauges: { shiftPoint: { source: 'percent', flashThresholdPct: 'high' } },
+      })
+      expect(merged.gauges.shiftPoint.source).toBe('percent')
+      expect(merged.gauges.shiftPoint.flashThresholdPct).toBe(
+        DEFAULT_OVERLAY_CONFIG.gauges.shiftPoint.flashThresholdPct,
+      )
+    })
+
+    it('accepts the threshold boundaries (0.5 and 1.0)', () => {
+      const low  = mergeWithDefaults({ gauges: { shiftPoint: { source: 'sdk', flashThresholdPct: 0.5 } } })
+      const high = mergeWithDefaults({ gauges: { shiftPoint: { source: 'sdk', flashThresholdPct: 1.0 } } })
+      expect(low.gauges.shiftPoint.flashThresholdPct).toBe(0.5)
+      expect(high.gauges.shiftPoint.flashThresholdPct).toBe(1.0)
+    })
+  })
 })

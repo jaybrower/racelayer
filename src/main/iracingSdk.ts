@@ -395,6 +395,11 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
     sessionTimeRemain:  rd(buf, D, 'SessionTimeRemain'),
     playerCarIdx:       cachedPlayerCarIdx,
     playerCarRedLine:   cachedRedLine,
+    // `ShiftIndicatorPct` may not be present on every car / build of the SDK.
+    // `rf` returns 0 on miss, which would be indistinguishable from "low revs"
+    // — so check the var map directly and surface NaN to the overlay when the
+    // field is unavailable, letting it fall back to the percentage heuristic.
+    shiftIndicatorPct:  varMap.has('ShiftIndicatorPct') ? rf(buf, D, 'ShiftIndicatorPct') : NaN,
     speed:              rf(buf, D, 'Speed'),
     gear:               ri(buf, D, 'Gear'),
     rpm:                rf(buf, D, 'RPM'),
@@ -448,6 +453,7 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
 const DISCONNECTED: IRacingTelemetry = {
   connected: false, isOnTrack: false, sessionType: 'unknown',
   sessionTime: 0, sessionTimeRemain: 0, playerCarIdx: 0, playerCarRedLine: 0,
+  shiftIndicatorPct: NaN,
   speed: 0, gear: 0, rpm: 0, throttle: 0, brake: 0,
   fuelLevel: 0, fuelUsePerHour: 0,
   lap: 0, lapCurrentLapTime: 0, lapLastLapTime: 0, lapBestLapTime: 0,

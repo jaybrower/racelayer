@@ -330,6 +330,131 @@ export default function OverlaysPane() {
           onChange={(st, val) => patch((c) => { c.radar.enabled[st] = val; return c })}
         />
       </div>
+
+      {/* Per-overlay configuration sections.  Currently only the RPM bar has
+          knobs beyond the per-session matrix; this is the precedent slot for
+          other overlays that grow their own settings later. */}
+      <RpmBarSection
+        source={config.gauges.shiftPoint.source}
+        flashThresholdPct={config.gauges.shiftPoint.flashThresholdPct}
+        onSetSource={(source) =>
+          patch((c) => { c.gauges.shiftPoint.source = source; return c })
+        }
+        onSetThreshold={(pct) =>
+          patch((c) => { c.gauges.shiftPoint.flashThresholdPct = pct; return c })
+        }
+      />
     </>
+  )
+}
+
+// ── RPM Bar configuration section ────────────────────────────────────────────
+//
+// Slots below the per-session-type matrix on the Overlays pane.  Two controls:
+//
+//   - Shift-indicator source (radio): SDK with percentage fallback (default)
+//     vs percentage-only.
+//   - Flash threshold (number input, 50–100% of redline): used directly in
+//     percentage mode, used as the fallback in SDK mode.
+
+function RpmBarSection({
+  source,
+  flashThresholdPct,
+  onSetSource,
+  onSetThreshold,
+}: {
+  source: 'sdk' | 'percent'
+  flashThresholdPct: number
+  onSetSource: (value: 'sdk' | 'percent') => void
+  onSetThreshold: (value: number) => void
+}) {
+  // Store the percentage as a whole-number integer in the UI (97), but
+  // persist as a 0-1 fraction (0.97) — matches the config schema and lets
+  // the threshold be checked against rpmPct directly.
+  const thresholdInt = Math.round(flashThresholdPct * 100)
+
+  const onThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.valueAsNumber
+    if (Number.isNaN(raw)) return
+    // Clamp to the same [50, 100] the config validator accepts.  Clamp here
+    // too so the UI never produces a value the merge layer would reject.
+    const clamped = Math.max(50, Math.min(100, Math.round(raw)))
+    onSetThreshold(clamped / 100)
+  }
+
+  return (
+    <div className={styles.subSection}>
+      <div className={styles.subSectionHeader}>
+        <div className={styles.subSectionTitle}>RPM Bar</div>
+        <div className={styles.subSectionDesc}>
+          Where the bar starts flashing red &harr; fuchsia to signal an
+          urgent shift point.
+        </div>
+      </div>
+
+      <div className={styles.subSectionBody}>
+        <div className={styles.fieldLabel}>Shift point source</div>
+        <div className={styles.radioStack}>
+          <label className={styles.radioStackBtn}>
+            <input
+              type="radio"
+              name="shiftSource"
+              value="sdk"
+              checked={source === 'sdk'}
+              onChange={() => onSetSource('sdk')}
+            />
+            <span className={styles.radioStackInner}>
+              <span className={styles.radioStackTitle}>
+                iRacing SDK (with percentage fallback)
+              </span>
+              <span className={styles.radioStackSub}>
+                Uses iRacing's per-car shift indicator when the car exposes
+                it (most paid cars do). Falls back to the percentage below
+                when the SDK is silent.
+              </span>
+            </span>
+          </label>
+          <label className={styles.radioStackBtn}>
+            <input
+              type="radio"
+              name="shiftSource"
+              value="percent"
+              checked={source === 'percent'}
+              onChange={() => onSetSource('percent')}
+            />
+            <span className={styles.radioStackInner}>
+              <span className={styles.radioStackTitle}>Percentage only</span>
+              <span className={styles.radioStackSub}>
+                Always trigger the flash from the percentage of redline,
+                regardless of what the SDK reports.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div className={styles.fieldRow}>
+          <div className={styles.fieldLabelInline}>
+            <div className={styles.fieldLabel}>Flash threshold</div>
+            <div className={styles.fieldSub}>
+              {source === 'sdk'
+                ? 'Used when the SDK shift indicator is unavailable.'
+                : 'Percent of redline that triggers the flash.'}
+            </div>
+          </div>
+          <div className={styles.fieldInputGroup}>
+            <input
+              type="number"
+              className={styles.numberInput}
+              min={50}
+              max={100}
+              step={1}
+              value={thresholdInt}
+              onChange={onThresholdChange}
+            />
+            <span className={styles.fieldUnit}>% of redline</span>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
