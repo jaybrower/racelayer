@@ -3,8 +3,18 @@ import { useTelemetry } from '../../contexts/TelemetryContext'
 import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
 import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
-import { MPH, FALLBACK_REDLINE, gearLabel, formatDelta, formatFuel } from './lib'
+import { MPH, FALLBACK_REDLINE, gearLabel, formatDelta, formatFuel, rpmZone, type RpmZone } from './lib'
 import styles from './Gauges.module.css'
+
+// Static map: RpmZone → CSS-module class.  Lifted out of the render path so
+// the lookup is a constant rather than rebuilt every frame.
+const RPM_ZONE_CLASS: Record<RpmZone, string> = {
+  low:      styles.rpmFill_low,
+  mid:      styles.rpmFill_mid,
+  high:     styles.rpmFill_high,
+  redline:  styles.rpmFill_redline,
+  shiftNow: styles.rpmFill_shiftNow,
+}
 
 // ── Rolling trace chart ───────────────────────────────────────────────────────
 
@@ -153,13 +163,15 @@ export default function Gauges() {
   const deltaValid    = isFinite(t.lapDeltaToBestLap)
   const deltaPositive = t.lapDeltaToBestLap > 0
 
-  // Gradient always spans the full bar width regardless of current fill amount.
-  // background-size stretches the image so its right edge aligns with the bar's right edge.
-  const rpmGradientStyle = {
-    backgroundImage: 'linear-gradient(90deg, #1e3a8a 0%, #1d4ed8 18%, #0ea5e9 38%, #06b6d4 54%, #10b981 66%, #eab308 76%, #f97316 86%, #ef4444 93%, #b91c1c 100%)',
-    backgroundSize:  rpmPct > 0.01 ? `${Math.round(100 / rpmPct)}% 100%` : '10000% 100%',
-    backgroundRepeat: 'no-repeat' as const,
-  }
+  // Discrete colour zone — stepped, not interpolated, so the bar reads at a
+  // glance peripherally.  Closes #36.
+  const zone = rpmZone(
+    rpmPct,
+    t.shiftIndicatorPct,
+    config.gauges.shiftPoint.source,
+    config.gauges.shiftPoint.flashThresholdPct,
+  )
+  const rpmFillClass = `${styles.rpmFill} ${RPM_ZONE_CLASS[zone]}`
 
   // Tick marks at every 1000 RPM up to (but not including) redline
   const rpmTicks: number[] = []
@@ -186,7 +198,7 @@ export default function Gauges() {
       {/* RPM bar — full width at top */}
       {show.rpmBar && (
         <div className={styles.rpmBar}>
-          <div className={styles.rpmFill} style={{ width: `${rpmPct * 100}%`, ...rpmGradientStyle }} />
+          <div className={rpmFillClass} style={{ width: `${rpmPct * 100}%` }} />
           {rpmTicks.map((r) => (
             <div key={r} className={styles.rpmTick} style={{ left: `${(r / maxRpm) * 100}%` }} />
           ))}

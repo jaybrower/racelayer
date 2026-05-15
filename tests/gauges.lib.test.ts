@@ -5,6 +5,8 @@ import {
   formatDelta,
   formatFuel,
   FUEL_LAP_TIME_GUESS,
+  rpmZone,
+  RPM_ZONE_BREAKS,
 } from '../src/renderer/src/overlays/Gauges/lib'
 
 describe('MPH constant', () => {
@@ -65,5 +67,78 @@ describe('formatFuel', () => {
     const perLap = (36 * FUEL_LAP_TIME_GUESS) / 3600
     const laps = 30 / perLap
     expect(formatFuel(30, 36).lapsEst).toBe(laps.toFixed(1))
+  })
+})
+
+describe('rpmZone', () => {
+  // Default config (mirrors DEFAULT_OVERLAY_CONFIG.gauges.shiftPoint).
+  const SDK = (rpmPct: number, sip: number, thresh = 0.97) =>
+    rpmZone(rpmPct, sip, 'sdk', thresh)
+  const PCT = (rpmPct: number, thresh = 0.97) =>
+    rpmZone(rpmPct, NaN, 'percent', thresh)
+
+  // ── Colour rhythm (zones below the flash) ────────────────────────────────
+  it('returns low below the mid breakpoint', () => {
+    expect(PCT(0)).toBe('low')
+    expect(PCT(RPM_ZONE_BREAKS.mid - 0.001)).toBe('low')
+  })
+  it('returns mid between mid and high breakpoints', () => {
+    expect(PCT(RPM_ZONE_BREAKS.mid)).toBe('mid')
+    expect(PCT(RPM_ZONE_BREAKS.high - 0.001)).toBe('mid')
+  })
+  it('returns high between high and redline breakpoints', () => {
+    expect(PCT(RPM_ZONE_BREAKS.high)).toBe('high')
+    expect(PCT(RPM_ZONE_BREAKS.redline - 0.001)).toBe('high')
+  })
+  it('returns redline between redline breakpoint and flash threshold', () => {
+    expect(PCT(RPM_ZONE_BREAKS.redline)).toBe('redline')
+    expect(PCT(0.969)).toBe('redline') // just under the default 0.97 threshold
+  })
+
+  // ── Flash trigger ───────────────────────────────────────────────────────────
+  describe('source: percent', () => {
+    it('triggers shiftNow at exactly the configured threshold', () => {
+      expect(PCT(0.97)).toBe('shiftNow')
+      expect(PCT(1.00)).toBe('shiftNow')
+    })
+
+    it('respects a custom threshold', () => {
+      expect(PCT(0.92, 0.93)).toBe('redline')
+      expect(PCT(0.93, 0.93)).toBe('shiftNow')
+    })
+
+    it('ignores SDK shift-indicator entirely', () => {
+      // sip claims shift-now, but source is percent and rpmPct is below thresh.
+      expect(rpmZone(0.80, 1.0, 'percent', 0.97)).toBe('high')
+    })
+  })
+
+  describe('source: sdk', () => {
+    it('triggers shiftNow when shiftIndicatorPct hits 1.0', () => {
+      expect(SDK(0.85, 1.0)).toBe('shiftNow')
+    })
+
+    it('does not trigger shiftNow below 1.0 even at high rpmPct', () => {
+      // SDK says "not yet" — trust it even when rpmPct is above the
+      // percentage fallback threshold.  Per-car shift points vary widely.
+      expect(SDK(0.98, 0.50)).toBe('redline')
+    })
+
+    it('falls back to percentage threshold when SDK value is NaN', () => {
+      expect(SDK(0.97, NaN)).toBe('shiftNow')
+      expect(SDK(0.96, NaN)).toBe('redline')
+    })
+
+    it('falls back to percentage threshold when SDK is NaN — colour rhythm intact', () => {
+      expect(SDK(0.40, NaN)).toBe('low')
+      expect(SDK(0.70, NaN)).toBe('mid')
+      expect(SDK(0.85, NaN)).toBe('high')
+    })
+  })
+
+  // ── Defensive ──────────────────────────────────────────────────────────────
+  it('clamps gracefully at the boundaries', () => {
+    expect(PCT(0)).toBe('low')
+    expect(PCT(1)).toBe('shiftNow')
   })
 })
