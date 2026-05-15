@@ -75,12 +75,19 @@
 > **Branch naming:** keep names short and conventional-commits-aligned — `feat/closing-rate`, `fix/pit-mode-gap`, `chore/branch-policy-update`. Release branches always carry the `v` prefix to match git tags: `release/v0.1.3`, never `release/0.1.3`.
 >
 > **Release-notes enforcement:** Every PR targeting a `release/v*` branch must modify the corresponding `release-notes/vX.Y.Z.md` file. Enforced by the `Require Release Notes` GitHub Action (`.github/workflows/require-release-notes.yml`). Bypass with the `no-release-notes` label on the PR for pure refactors or behaviour-preserving changes where `Internal: (none)` is the honest answer — the workflow re-runs on label add/remove, so applying the label turns the failing check green without a force-push.
+>
+> **Testing:** Two complementary layers.
+>
+> - **Automated unit tests** live in `tests/**/*.test.ts` and run via Vitest (`npm test` / `npm run test:watch`). Scope is **pure logic only** — telemetry parsing, derived calculations (closing-rate regression, stint detection, tire-deg trend), formatters, `mergeWithDefaults`. No Electron, no React rendering, no jsdom. The `Test` GitHub Action runs the suite on every PR and on pushes to `main` / `release/v*`.
+> - **Manual test plan** lives in `docs/test-plan.md` and covers everything the unit tests can't: real-vs-mock telemetry behaviour, pit mode, disconnect/reconnect, session-type switching, overlay rendering, drag/edit mode, settings. Walk through the relevant sections before merging a release-branch PR into `main`.
+>
+> When adding a new feature with derived logic, add the unit test in the same PR that introduces the logic. When changing user-visible behaviour, also update `docs/test-plan.md` so the manual checklist stays accurate.
 
 ## What This Is
 
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
 
-App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.3`
+App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.4`
 GitHub: `https://github.com/jaybrower/racelayer`
 
 ## Project Structure
@@ -136,6 +143,10 @@ npm run dev
 
 # Type check only
 npx tsc --noEmit
+
+# Run pure-logic unit tests (Vitest)
+npm test            # one-shot
+npm run test:watch  # watch mode
 
 # Build + package (produces NSIS installer + portable .exe)
 npm run dist
