@@ -78,10 +78,12 @@
 >
 > **Testing:** Two complementary layers.
 >
-> - **Automated unit tests** live in `tests/**/*.test.ts` and run via Vitest (`npm test` / `npm run test:watch`). Scope is **pure logic only** — telemetry parsing, derived calculations (closing-rate regression, stint detection, tire-deg trend), formatters, `mergeWithDefaults`. No Electron, no React rendering, no jsdom. The `Test` GitHub Action runs the suite on every PR and on pushes to `main` / `release/v*`.
-> - **Manual test plan** lives in `docs/test-plan.md` and covers everything the unit tests can't: real-vs-mock telemetry behaviour, pit mode, disconnect/reconnect, session-type switching, overlay rendering, drag/edit mode, settings. Walk through the relevant sections before merging a release-branch PR into `main`.
+> - **Automated unit tests** live in `tests/**/*.test.ts` and run via Vitest (`npm test` / `npm run test:watch`). Scope is **pure logic only** — telemetry parsing, derived calculations (closing-rate regression, stint detection, tire-deg trend), formatters, `mergeWithDefaults`. No Electron, no React rendering, no jsdom. The pure logic for each overlay lives in a sibling `lib.ts` next to the component (`PitStrategy/lib.ts`, `Relative/lib.ts`, `Gauges/lib.ts`) — components import from `./lib` so the test suite exercises the exact code that runs at render time. The `Test` GitHub Action runs the suite on every PR and on pushes to `main` / `release/v*`.
+> - **Manual test plan** lives in `docs/test-plan.md` and covers everything the unit tests can't: real-vs-mock telemetry behaviour, pit mode, disconnect/reconnect, session-type switching, overlay rendering, drag/edit mode, settings, the in-app updater. Includes a 5-minute pre-release smoke loop and a full pass for stable releases. Walk through the relevant sections before merging a release-branch PR into `main`.
 >
-> When adding a new feature with derived logic, add the unit test in the same PR that introduces the logic. When changing user-visible behaviour, also update `docs/test-plan.md` so the manual checklist stays accurate.
+> When adding a new feature with derived logic, put the logic in the overlay's `lib.ts` and add a unit test in the same PR. When changing user-visible behaviour, also update `docs/test-plan.md` so the manual checklist stays accurate.
+>
+> **PR template** (`.github/pull_request_template.md`) pre-fills the Summary / Why / Test plan / Checklist scaffolding and reminds authors to link the issue, update release notes, and run the relevant tests. GitHub injects it automatically when opening a PR via the web UI; `gh pr create` will use it too unless you pass `--body`.
 
 ## What This Is
 
