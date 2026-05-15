@@ -56,6 +56,22 @@
 > git merge main && git push
 > ```
 >
+> **Issue lifecycle through the release cycle:** Linked issues do **not** auto-close when their PR merges into a `release/v*` branch — GitHub's native `Closes #N` only fires on merge to the default branch. Instead, the `Label Merged Issues` workflow applies the `ready-to-release` label to each referenced issue on release-branch merge, so the milestone view stays useful:
+>
+> - **Open + unlabeled** → work not yet merged
+> - **Open + `ready-to-release`** → code merged, awaiting release
+> - **Closed** → shipped to users
+>
+> Filter the backlog with `is:open -label:ready-to-release` to see only actively-pending work.
+>
+> When a release ships (release/v* → main merges and the new build is published), close all the `ready-to-release` issues for that milestone in one shot:
+>
+> ```bash
+> gh issue list --label ready-to-release --milestone v0.1.3 \
+>   --state open --json number --jq '.[].number' \
+>   | xargs -I{} gh issue close {} --reason completed
+> ```
+>
 > **Branch naming:** keep names short and conventional-commits-aligned — `feat/closing-rate`, `fix/pit-mode-gap`, `chore/branch-policy-update`. Release branches always carry the `v` prefix to match git tags: `release/v0.1.3`, never `release/0.1.3`.
 >
 > **Release-notes enforcement:** Every PR targeting a `release/v*` branch must modify the corresponding `release-notes/vX.Y.Z.md` file. Enforced by the `Require Release Notes` GitHub Action (`.github/workflows/require-release-notes.yml`). Bypass with the `no-release-notes` label on the PR for pure refactors or behaviour-preserving changes where `Internal: (none)` is the honest answer — the workflow re-runs on label add/remove, so applying the label turns the failing check green without a force-push.
