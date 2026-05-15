@@ -13,6 +13,8 @@
 >
 > **Why this shape:** features get smaller, more focused PRs into the release branch; pre-release builds can be cut from `release/*` without disturbing `main`; `main`'s history reads as a release log. One release branch is open at a time so feature targeting stays simple.
 >
+> **Every PR must reference a GitHub issue.** The issue captures the *why* (problem, desired behaviour, acceptance criteria); the PR captures the *how* (implementation). Before starting a feature, either pick an existing issue or open one. The PR body must include `Closes #N` (or `Fixes #N` / `Resolves #N`) so the issue auto-closes on merge and the link is visible from both views. If no issue exists yet when the user describes a task, the assistant should propose one (title + acceptance criteria) and confirm with the user before opening it. **Exception:** trivial behaviour-preserving PRs (typo fixes, formatting) may skip the issue.
+>
 > **Start-of-session recipe** — always branch features from `main`, not from the active release branch:
 > ```bash
 > git checkout main && git pull
