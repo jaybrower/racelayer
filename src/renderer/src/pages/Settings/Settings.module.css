@@ -685,7 +685,15 @@
 /* ── Overlay config table ────────────────────────────────────────────────── */
 .cfgTable {
   width: 100%;
-  border-collapse: collapse;
+  /* `separate` (not `collapse`) is required for two reasons:
+     1. `position: sticky` on `<thead>` only renders reliably with `separate`
+        in Chromium — `collapse` puts the cells in a different paint context
+        that leaks scrolled content through cell-edge sub-pixel gaps.
+     2. Backgrounds on `<thead>` and `<tr>` render correctly with `separate`,
+        giving us a continuous opaque band across the whole sticky header
+        instead of a per-cell quilt. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
 }
 
@@ -695,13 +703,18 @@
   position: relative;
 }
 
-.cfgStickyHead th {
+/* The sticky header sticks as one continuous opaque band — apply sticky to
+   the `<thead>` itself rather than individual cells so there's no chance of
+   scrolled rows peeking through the gaps between sticky cells. */
+.cfgStickyHead {
   position: sticky;
   top: 0;
-  /* Match the .pane background so column labels are readable while overlapping
-     scrolled content. Keep z-index above ordinary rows. */
+  z-index: 5;
   background: #0f172a;
-  z-index: 2;
+}
+
+.cfgStickyHead th {
+  background: #0f172a;
   padding-top: 4px;
   padding-bottom: 8px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -753,7 +766,11 @@
 
 .cfgRow td {
   padding: 5px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  /* `border-top` (not `border-bottom`) so under `border-collapse: separate`
+     a regular row immediately following a group header doesn't stack two
+     lines at the boundary — each border lives at the TOP of its own row,
+     not at the boundary between rows. */
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .cfgRowIndent .cfgLabel {
