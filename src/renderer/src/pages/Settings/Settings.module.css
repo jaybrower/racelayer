@@ -141,11 +141,27 @@
 .pane {
   flex: 1;
   min-width: 0;
-  padding: 20px 24px;
+  /* Padding-top is intentionally 0.  Background:
+       In Chromium, the scrollport of an `overflow-y: auto` box sits at the
+       INSIDE of the padding-box — so `position: sticky; top: 0` pins to the
+       inside-of-padding edge, not the visible top of the element.  With a
+       20px padding-top, sticky elements (the Overlays-pane column header)
+       pinned 20px below the visible top of `.pane`, and scrolled rows were
+       briefly visible in that 20px band before clipping.
+       Solution: move the breathing room from `.pane`'s padding-top onto a
+       `margin-top` on the pane's first child — margins are part of the
+       scrollable content, so they scroll away as the user scrolls, and the
+       sticky thead pins flush with the visible top of `.pane`. */
+  padding: 0 24px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
+}
+
+/* See `.pane` comment above. */
+.pane > *:first-child {
+  margin-top: 20px;
 }
 
 .paneIntro {
