@@ -191,6 +191,13 @@ function OverlayConfigSection() {
           disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
           onChange={(st, val) => patch(c => { c.relative.columns.closingRate[st] = val; return c })}
         />
+        <OverlayRow
+          label="Side Indicator"
+          flags={config.relative.columns.carLeftRight}
+          indent
+          disabled={SESSION_TYPES.every(st => !config.relative.enabled[st])}
+          onChange={(st, val) => patch(c => { c.relative.columns.carLeftRight[st] = val; return c })}
+        />
 
         {/* ── Pit Strategy ── */}
         <tr><td colSpan={4} className={styles.cfgSpacer} /></tr>
@@ -221,7 +228,13 @@ function OverlayConfigSection() {
           onChange={(st, val) => patch(c => { c.pitStrategy.sections.pitWindow[st] = val; return c })}
         />
 
-        {/* Radar intentionally omitted — re-enable once better positional data is available */}
+        {/* ── Radar ── */}
+        <tr><td colSpan={4} className={styles.cfgSpacer} /></tr>
+        <OverlayRow
+          label="Radar"
+          flags={config.radar.enabled}
+          onChange={(st, val) => patch(c => { c.radar.enabled[st] = val; return c })}
+        />
       </tbody>
     </table>
     </>

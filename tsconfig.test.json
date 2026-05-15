@@ -1,0 +1,23 @@
+// Standalone tsconfig for the editor when working in `tests/`.
+//
+// NOT part of the project-references graph in `tsconfig.json` — Vitest does
+// its own transpilation, and including this as a project reference forces
+// `tsc --build` to revalidate every imported source file under a third
+// project, which conflicts with `tsconfig.web.json` ownership of the
+// renderer sources.  Keeping it standalone lets editors pick up test files
+// without breaking `tsc --build`.
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "tests/**/*",
+    "vitest.config.ts",
+    "src/renderer/src/**/*"
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": ["src/renderer/src/*"]
+    },
+    "types": ["node"]
+  }
+}

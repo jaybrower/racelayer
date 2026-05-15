@@ -3,34 +3,8 @@ import { useTelemetry } from '../../contexts/TelemetryContext'
 import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
 import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
+import { MPH, FALLBACK_REDLINE, gearLabel, formatDelta, formatFuel } from './lib'
 import styles from './Gauges.module.css'
-
-const MPH = 2.23694
-const FALLBACK_REDLINE = 8000 // used until SDK reports the real value
-
-const GEAR_LABEL: Record<number, string> = {
-  [-1]: 'R',
-  [0]: 'N',
-}
-
-function gearLabel(gear: number): string {
-  return GEAR_LABEL[gear] ?? String(gear)
-}
-
-function formatDelta(s: number): string {
-  if (!isFinite(s)) return '--'
-  const sign = s <= 0 ? '-' : '+'
-  return `${sign}${Math.abs(s).toFixed(3)}`
-}
-
-function formatFuel(liters: number, perHour: number): { level: string; lapsEst: string } {
-  const perLap = perHour / (3600 / 92) // rough lap-time guess — real SDK gives per-lap
-  const laps = perLap > 0 ? liters / perLap : 0
-  return {
-    level: liters.toFixed(1),
-    lapsEst: laps > 0 ? laps.toFixed(1) : '--',
-  }
-}
 
 // ── Rolling trace chart ───────────────────────────────────────────────────────
 
