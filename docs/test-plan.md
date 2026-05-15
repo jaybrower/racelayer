@@ -73,8 +73,10 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 
 - [ ] `Ctrl+Shift+L` toggles edit mode. Every overlay shows the **"✥ DRAG TO REPOSITION"** banner.
 - [ ] Click-and-drag moves the window smoothly. No lag, no jump-to-cursor.
+- [ ] **Drag does not grow the window** — pick an overlay, note its width/height, drag it across the full width of the primary monitor, release. Final size matches the starting size to the pixel. Repeat at 100% / 125% / 150% / 200% Windows display scaling — regression for #29.
 - [ ] Settings → Overlay Positions → "Reset to defaults" snaps every overlay back to its starting position.
 - [ ] **Multi-monitor** — drag an overlay to a different monitor. After quit/relaunch it returns to that monitor.
+- [ ] **Cross-monitor drag size** — on a multi-monitor setup with mixed scaling, drag an overlay from one display to another and back. Final size matches starting size.
 - [ ] **Monitor unplug** — quit RaceLayer, change monitor config (unplug or rearrange), relaunch. Positions should be sensible (per-monitor-config save means they may revert to defaults for the new layout; that's intentional).
 - [ ] **Click-through** — leave edit mode. Clicks now pass through the overlay to whatever's behind it. Hovering over a Twitch window, a browser, the desktop — none of them get "stolen" focus.
 
