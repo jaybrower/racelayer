@@ -698,79 +698,78 @@
   color: #f87171;
 }
 
-/* ── Overlay config table ────────────────────────────────────────────────── */
-.cfgTable {
-  width: 100%;
-  /* `separate` (not `collapse`) is required for two reasons:
-     1. `position: sticky` on `<thead>` only renders reliably with `separate`
-        in Chromium — `collapse` puts the cells in a different paint context
-        that leaks scrolled content through cell-edge sub-pixel gaps.
-     2. Backgrounds on `<thead>` and `<tr>` render correctly with `separate`,
-        giving us a continuous opaque band across the whole sticky header
-        instead of a per-cell quilt. */
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 12px;
+/* ── Overlays matrix ──────────────────────────────────────────────────────────
+   CSS Grid replacement for what used to be an HTML <table>.  The table form
+   was painful for three reasons that all stem from `<tr>` being a
+   render-anonymous element:
+     1. `margin` on `<tr>` is silently dropped, so per-group spacing was
+        impossible without padding-on-cell workarounds that didn't compose.
+     2. Sticky positioning on individual `<th>` cells leaked scrolled rows
+        through sub-pixel cell-edge gaps, then sticky-on-`<thead>` required
+        `border-collapse: separate` which had its own border-doubling traps.
+     3. Custom checkbox styling inside `<td>` competes with the cell's own
+        text-align / vertical-align inheritance rules.
+   Flex column of grid rows sidesteps all three.  Each "row" is a real
+   block-level <div> with normal box-model behaviour: margin, padding, and
+   sticky all work as written. */
+
+.matrix {
+  display: flex;
+  flex-direction: column;
 }
 
-.cfgTableWrap {
-  /* Pane already scrolls; this wrapper exists so the table can establish
-     a positioning context for the sticky header. */
-  position: relative;
+/* Each row is its own 4-column grid so the columns stay aligned even though
+   the rows themselves are independent block elements (no shared table layout). */
+.matrixHead,
+.matrixRow {
+  display: grid;
+  grid-template-columns: 1fr 72px 72px 72px;
+  align-items: center;
 }
 
-/* The sticky header sticks as one continuous opaque band — apply sticky to
-   the `<thead>` itself rather than individual cells so there's no chance of
-   scrolled rows peeking through the gaps between sticky cells. */
-.cfgStickyHead {
+/* Sticky column header — pins flush with the visible top of `.pane`
+   because `.pane`'s padding-top is 0 (see the `.pane` block above). */
+.matrixHead {
   position: sticky;
   top: 0;
   z-index: 5;
   background: #0f172a;
-}
-
-.cfgStickyHead th {
-  background: #0f172a;
-  padding-top: 4px;
-  padding-bottom: 8px;
+  padding: 4px 0 8px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.cfgHead {
-  text-align: left;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: #334155;
-  text-transform: uppercase;
+.matrixHeadLabel {
+  /* placeholder so the grid has 4 cells; no visible content */
 }
 
-.cfgHeadCell {
+.matrixHeadCol {
   text-align: center;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #475569;
   text-transform: uppercase;
-  min-width: 72px;
 }
 
-.overlayGroupHeader {
-  /* Top padding gives visible breathing room between the previous overlay's
-     last row and this group's title.  Bottom padding is intentionally smaller
-     so the title sits closer to its own rows than to the previous group. */
-  padding: 28px 0 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+/* Group header — visual section break between overlays.  Margins on a
+   block-level <div> work reliably, unlike margins on a <tr>. */
+.matrixGroupHeader {
+  margin-top: 24px;
+  padding: 10px 0 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.overlayGroupHeader:first-child {
-  /* First group (Gauges) sits right under the sticky column header — no
-     prior overlay to separate it from, so collapse to a small top padding. */
+/* First group header (Gauges) sits directly under the sticky column head —
+   no previous overlay to separate it from, so suppress the top margin and
+   border.  The `.matrixHead + .matrixGroupHeader` selector is robust: the
+   first group is always the one immediately following the sticky head. */
+.matrixHead + .matrixGroupHeader {
+  margin-top: 0;
   border-top: none;
-  padding-top: 6px;
+  padding-top: 4px;
 }
 
-.overlayGroupTitle {
+.matrixGroupTitle {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -778,66 +777,126 @@
   text-transform: uppercase;
 }
 
-.overlayGroupDesc {
+.matrixGroupDesc {
   font-size: 11px;
   color: #475569;
   margin-top: 2px;
   line-height: 1.4;
 }
 
-.cfgRow td {
-  padding: 5px 0;
-  /* `border-top` (not `border-bottom`) so under `border-collapse: separate`
-     a regular row immediately following a group header doesn't stack two
-     lines at the boundary — each border lives at the TOP of its own row,
-     not at the boundary between rows. */
+.matrixRow {
+  padding: 6px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.12s;
+  border-radius: 4px;
 }
 
-.cfgRowIndent .cfgLabel {
-  padding-left: 14px;
+.matrixRow:hover {
+  background: rgba(59, 130, 246, 0.05);
 }
 
-.cfgRowDisabled {
+.matrixRow:hover .matrixLabel {
+  color: #f1f5f9;
+}
+
+.matrixRowDisabled {
   opacity: 0.35;
 }
 
-.cfgLabel {
+.matrixLabel {
   color: #cbd5e1;
   font-size: 12px;
   font-weight: 500;
   padding-right: 12px;
+  display: flex;
+  align-items: center;
+  transition: color 0.12s;
 }
 
-.cfgArrow {
+.matrixRowIndent .matrixLabel {
+  padding-left: 14px;
+}
+
+.matrixArrow {
   color: #334155;
   margin-right: 6px;
   font-size: 10px;
 }
 
-.cfgCell {
-  text-align: center;
-  vertical-align: middle;
+.matrixCell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.cfgSpacer {
-  height: 6px;
-}
+/* ── Custom checkbox ──────────────────────────────────────────────────────────
+   Native <input type="checkbox"> is visually replaced by a styled square —
+   the input itself stays in the DOM (and receives clicks via the wrapping
+   <label>) so keyboard focus, screen-reader semantics, and form behaviour
+   continue to work.  The adjacent <span> paints the visual state via the
+   `input:checked + .checkboxBox` adjacent-sibling pattern. */
 
-.cfgCheck {
-  width: 15px;
-  height: 15px;
+.checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   cursor: pointer;
-  accent-color: #3b82f6;
+  user-select: none;
 }
 
-/* Hovering a row in the overlays matrix subtly highlights it so users
-   immediately see which row's tooltip will appear. */
-.cfgRow:hover {
-  background: rgba(59, 130, 246, 0.04);
+.checkbox input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
-.cfgRow:hover .cfgLabel {
-  color: #f1f5f9;
+
+.checkboxDisabled,
+.checkboxDisabled input {
+  cursor: not-allowed;
+}
+
+.checkboxBox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.checkbox input:checked + .checkboxBox {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.checkbox:hover input:not(:disabled) + .checkboxBox {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.checkbox:hover input:checked:not(:disabled) + .checkboxBox {
+  background: #60a5fa;
+  border-color: #60a5fa;
+}
+
+.checkbox input:focus-visible + .checkboxBox {
+  outline: 2px solid rgba(96, 165, 250, 0.6);
+  outline-offset: 2px;
+}
+
+.checkboxMark {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
 }
 
 /* ── About pane ───────────────────────────────────────────────────────────── */
