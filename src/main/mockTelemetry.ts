@@ -187,8 +187,8 @@ export function createMockPoller() {
 
     return {
       connected: true,
-      // Dev mode always simulates the driver being in their cockpit so overlays
-      // render. Real-SDK IsOnTrack reflects the iRacing menu/cockpit state.
+      // Preview mode always simulates the driver being in their cockpit so
+      // overlays render. Real-SDK IsOnTrack reflects the iRacing menu/cockpit state.
       isOnTrack: true,
       sessionType: state.sessionType,
       sessionTime: state.tick * dt,
@@ -226,7 +226,7 @@ export function createMockPoller() {
       },
       cars:     carsRaw,
       drivers:  MOCK_DRIVERS,
-      // Dev mode simulates a car with full capability support
+      // Preview mode simulates a car with full capability support
       capabilities: { hasSurfaceTireTemps: true, hasTractionControl: true, hasABS: true },
     }
   }

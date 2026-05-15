@@ -33,14 +33,144 @@
   margin-top: 1px;
 }
 
-.body {
+/* ── Sidebar + pane layout ────────────────────────────────────────────────── */
+
+.layout {
   flex: 1;
   min-height: 0; /* allows flex child to shrink and actually scroll */
-  padding: 20px 24px;
+  display: flex;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  padding: 12px 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 2px;
   overflow-y: auto;
+}
+
+/* ── Scrollbars ────────────────────────────────────────────────────────────
+   Replace the OS default scrollbar (~17px, opaque) with a thin themed one
+   for the two scrollable regions in the Settings window.  Electron is
+   always Chromium so the `::-webkit-scrollbar` pseudo-elements give us
+   full control without needing the standards-track `scrollbar-*` properties.
+   Track stays transparent so it disappears when there's nothing to scroll;
+   thumb is barely-visible at rest and brightens on hover. */
+.sidebar::-webkit-scrollbar,
+.pane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.pane::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.pane::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.sidebar::-webkit-scrollbar-corner,
+.pane::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.navBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  font-family: inherit;
+}
+
+.navBtn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+}
+
+.navBtnActive {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+
+.navBtnActive:hover {
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.navIcon {
+  display: inline-flex;
+  width: 18px;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.navLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane {
+  flex: 1;
+  min-width: 0;
+  /* Padding-top is intentionally 0.  Background:
+       In Chromium, the scrollport of an `overflow-y: auto` box sits at the
+       INSIDE of the padding-box — so `position: sticky; top: 0` pins to the
+       inside-of-padding edge, not the visible top of the element.  With a
+       20px padding-top, sticky elements (the Overlays-pane column header)
+       pinned 20px below the visible top of `.pane`, and scrolled rows were
+       briefly visible in that 20px band before clipping.
+       Solution: move the breathing room from `.pane`'s padding-top onto a
+       `margin-top` on the pane's first child — margins are part of the
+       scrollable content, so they scroll away as the user scrolls, and the
+       sticky thead pins flush with the visible top of `.pane`. */
+  padding: 0 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* See `.pane` comment above. */
+.pane > *:first-child {
+  margin-top: 20px;
+}
+
+.paneIntro {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 4px;
 }
 
 .section {
@@ -568,72 +698,267 @@
   color: #f87171;
 }
 
-/* ── Overlay config table ────────────────────────────────────────────────── */
-.cfgTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
+/* ── Overlays matrix ──────────────────────────────────────────────────────────
+   CSS Grid replacement for what used to be an HTML <table>.  The table form
+   was painful for three reasons that all stem from `<tr>` being a
+   render-anonymous element:
+     1. `margin` on `<tr>` is silently dropped, so per-group spacing was
+        impossible without padding-on-cell workarounds that didn't compose.
+     2. Sticky positioning on individual `<th>` cells leaked scrolled rows
+        through sub-pixel cell-edge gaps, then sticky-on-`<thead>` required
+        `border-collapse: separate` which had its own border-doubling traps.
+     3. Custom checkbox styling inside `<td>` competes with the cell's own
+        text-align / vertical-align inheritance rules.
+   Flex column of grid rows sidesteps all three.  Each "row" is a real
+   block-level <div> with normal box-model behaviour: margin, padding, and
+   sticky all work as written. */
+
+.matrix {
+  display: flex;
+  flex-direction: column;
 }
 
-.cfgHead {
-  text-align: left;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: #334155;
-  text-transform: uppercase;
-  padding-bottom: 6px;
+/* Each row is its own 4-column grid so the columns stay aligned even though
+   the rows themselves are independent block elements (no shared table layout). */
+.matrixHead,
+.matrixRow {
+  display: grid;
+  grid-template-columns: 1fr 72px 72px 72px;
+  align-items: center;
 }
 
-.cfgHeadCell {
+/* Sticky column header — pins flush with the visible top of `.pane`
+   because `.pane`'s padding-top is 0 (see the `.pane` block above). */
+.matrixHead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #0f172a;
+  padding: 4px 0 8px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.matrixHeadLabel {
+  /* placeholder so the grid has 4 cells; no visible content */
+}
+
+.matrixHeadCol {
   text-align: center;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #475569;
   text-transform: uppercase;
-  padding-bottom: 6px;
-  min-width: 72px;
 }
 
-.cfgRow td {
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+/* Group header — visual section break between overlays.  Margins on a
+   block-level <div> work reliably, unlike margins on a <tr>. */
+.matrixGroupHeader {
+  margin-top: 24px;
+  padding: 10px 0 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.cfgRowIndent .cfgLabel {
-  padding-left: 14px;
+/* First group header (Gauges) sits directly under the sticky column head —
+   no previous overlay to separate it from, so suppress the top margin and
+   border.  The `.matrixHead + .matrixGroupHeader` selector is robust: the
+   first group is always the one immediately following the sticky head. */
+.matrixHead + .matrixGroupHeader {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 4px;
 }
 
-.cfgRowDisabled {
+.matrixGroupTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #cbd5e1;
+  text-transform: uppercase;
+}
+
+.matrixGroupDesc {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.matrixRow {
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.12s;
+  border-radius: 4px;
+}
+
+.matrixRow:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.matrixRow:hover .matrixLabel {
+  color: #f1f5f9;
+}
+
+.matrixRowDisabled {
   opacity: 0.35;
 }
 
-.cfgLabel {
+.matrixLabel {
   color: #cbd5e1;
   font-size: 12px;
   font-weight: 500;
   padding-right: 12px;
+  display: flex;
+  align-items: center;
+  transition: color 0.12s;
 }
 
-.cfgArrow {
+.matrixRowIndent .matrixLabel {
+  padding-left: 14px;
+}
+
+.matrixArrow {
   color: #334155;
   margin-right: 6px;
   font-size: 10px;
 }
 
-.cfgCell {
-  text-align: center;
-  vertical-align: middle;
+.matrixCell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.cfgSpacer {
-  height: 6px;
-}
+/* ── Custom checkbox ──────────────────────────────────────────────────────────
+   Native <input type="checkbox"> is visually replaced by a styled square —
+   the input itself stays in the DOM (and receives clicks via the wrapping
+   <label>) so keyboard focus, screen-reader semantics, and form behaviour
+   continue to work.  The adjacent <span> paints the visual state via the
+   `input:checked + .checkboxBox` adjacent-sibling pattern. */
 
-.cfgCheck {
-  width: 15px;
-  height: 15px;
+.checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   cursor: pointer;
-  accent-color: #3b82f6;
+  user-select: none;
+}
+
+.checkbox input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.checkboxDisabled,
+.checkboxDisabled input {
+  cursor: not-allowed;
+}
+
+.checkboxBox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.checkbox input:checked + .checkboxBox {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.checkbox:hover input:not(:disabled) + .checkboxBox {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.checkbox:hover input:checked:not(:disabled) + .checkboxBox {
+  background: #60a5fa;
+  border-color: #60a5fa;
+}
+
+.checkbox input:focus-visible + .checkboxBox {
+  outline: 2px solid rgba(96, 165, 250, 0.6);
+  outline-offset: 2px;
+}
+
+.checkboxMark {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+/* ── About pane ───────────────────────────────────────────────────────────── */
+
+.aboutHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 12px;
+}
+
+.aboutTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.02em;
+}
+
+.aboutVersion {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.aboutLinks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 16px;
+}
+
+.externalLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-left: -10px;
+  border-radius: 5px;
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.externalLink:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #bfdbfe;
+}
+
+.externalIcon {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.aboutFooter {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }

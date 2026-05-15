@@ -1,10 +1,10 @@
-import { app, BrowserWindow, globalShortcut, screen, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, globalShortcut, screen, ipcMain, Tray, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { startTelemetryPolling, stopTelemetryPolling } from './telemetry.js'
 import { registerConfigHandlers } from './config.js'
-import { getDevMode, setDevMode } from './devMode.js'
+import { getPreviewMode, setPreviewMode } from './previewMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
 import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
 import type { IRacingTelemetry } from './telemetry.js'
@@ -83,11 +83,19 @@ function createOverlayWindow(def: OverlayDef): BrowserWindow {
 }
 
 function createSettingsWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 680,
-    height: 560,
-    minWidth: 560,
-    minHeight: 400,
+  // Restore size/position from the last session if we have one for the
+  // current monitor configuration.  Width/height fall back to the hard-coded
+  // defaults; x/y fall back to -1 which Electron treats as "OS-position"
+  // (centred on the primary display on Windows) so a fresh install still
+  // opens nicely centred.
+  const saved = loadSettingsBounds()
+  const width  = Math.max(SETTINGS_MIN_WIDTH,  saved?.width  ?? SETTINGS_DEFAULT_BOUNDS.width)
+  const height = Math.max(SETTINGS_MIN_HEIGHT, saved?.height ?? SETTINGS_DEFAULT_BOUNDS.height)
+  const winOpts: Electron.BrowserWindowConstructorOptions = {
+    width,
+    height,
+    minWidth:  SETTINGS_MIN_WIDTH,
+    minHeight: SETTINGS_MIN_HEIGHT,
     show: false,
     frame: true,
     title: 'RaceLayer — Settings',
@@ -100,7 +108,12 @@ function createSettingsWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
     },
-  })
+  }
+  if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+    winOpts.x = saved.x
+    winOpts.y = saved.y
+  }
+  const win = new BrowserWindow(winOpts)
 
   if (is.dev) {
     win.loadURL(rendererUrl('settings'))
@@ -110,9 +123,24 @@ function createSettingsWindow(): BrowserWindow {
     })
   }
 
-  // Hide instead of destroy so reopening is fast
+  // Persist size + position on every move / resize, debounced so a drag
+  // doesn't fire dozens of disk writes per second.  500ms balances "saved
+  // before the user moves on" against write amplification.
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+  const schedulePersist = () => {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => saveSettingsBounds(win), 500)
+  }
+  win.on('move', schedulePersist)
+  win.on('resize', schedulePersist)
+
+  // Hide instead of destroy so reopening is fast.  Flush any pending bounds
+  // save synchronously here so the final on-screen state is what we persist
+  // — without this, fast-close-after-resize could lose the last move.
   win.on('close', (e) => {
     e.preventDefault()
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
+    saveSettingsBounds(win)
     win.hide()
   })
 
@@ -131,17 +159,17 @@ function openSettings() {
 }
 
 function buildTrayMenu() {
-  const dev = getDevMode()
+  const preview = getPreviewMode()
   return Menu.buildFromTemplate([
     { label: 'Settings', click: openSettings },
     { type: 'separator' },
     {
-      label: 'Dev Mode',
+      label: 'Preview Mode',
       type: 'checkbox',
-      checked: dev.enabled,
+      checked: preview.enabled,
       click: (item) => {
-        setDevMode({ enabled: item.checked })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ enabled: item.checked })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         // Rebuild menu so session type items update
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
@@ -149,38 +177,50 @@ function buildTrayMenu() {
     {
       label: 'Session: Practice',
       type: 'radio',
-      checked: dev.sessionType === 'practice',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'practice',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'practice' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'practice' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     {
       label: 'Session: Qualifying',
       type: 'radio',
-      checked: dev.sessionType === 'qualifying',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'qualifying',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'qualifying' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'qualifying' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     {
       label: 'Session: Race',
       type: 'radio',
-      checked: dev.sessionType === 'race',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'race',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'race' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'race' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     { type: 'separator' },
-    { label: 'Quit', click: () => app.exit() },
+    {
+      label: 'Quit',
+      click: () => {
+        // `app.exit()` skips the close-event handlers, so flush the Settings
+        // window bounds here as a belt-and-suspenders — otherwise a resize
+        // followed immediately by tray-Quit can lose up to ~500ms of changes
+        // sitting in the debounce timer.
+        if (settingsWindow && !settingsWindow.isDestroyed()) {
+          saveSettingsBounds(settingsWindow)
+        }
+        app.exit()
+      },
+    },
   ])
 }
 
@@ -198,12 +238,33 @@ function createTray() {
   tray.on('click', openSettings)
 }
 
-function broadcastToAll(channel: string, data: unknown) {
+/** Send an IPC event to every overlay window — NOT the Settings window.
+ *  Use this for high-frequency, overlay-specific channels like
+ *  `telemetry:update` (~10 Hz) and `overlay:editMode`, where the Settings
+ *  window neither subscribes nor benefits and the extra IPC traffic is waste. */
+function broadcastToOverlays(channel: string, data: unknown) {
   windows.forEach((win) => {
     if (!win.isDestroyed()) {
       win.webContents.send(channel, data)
     }
   })
+}
+
+/** Send an IPC event to every window — overlays AND the Settings window.
+ *  Use this for *state-change* channels that the Settings UI cares about:
+ *  `previewMode:changed`, `config:changed`, `update:status`, etc.  Without
+ *  this fan-out, the Settings pane never sees changes initiated from the
+ *  tray menu (e.g. toggling Preview Mode from the Windows tray).
+ *
+ *  Original `broadcastToAll` did NOT include the Settings window, so any
+ *  state change driven from the tray or from the main process never
+ *  propagated to Settings — visible to the user as Preview Mode getting
+ *  out of sync between tray and Settings. */
+function broadcastToAll(channel: string, data: unknown) {
+  broadcastToOverlays(channel, data)
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send(channel, data)
+  }
 }
 
 // ── Window position persistence (per monitor configuration) ──────────────────
@@ -257,6 +318,37 @@ function loadWindowPositions(): Record<string, Partial<WindowLayout>> {
   try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return {} }
 }
 
+// ── Settings window bounds persistence ────────────────────────────────────────
+//
+// Mirrors the overlay-position pattern (per-monitor-config file) but for the
+// single Settings window.  Keyed by `monitorKey()` so unplugging or rearranging
+// monitors yields defaults for that new layout instead of restoring an
+// off-screen window.
+
+const SETTINGS_DEFAULT_BOUNDS: WindowLayout = { x: -1, y: -1, width: 680, height: 560 }
+const SETTINGS_MIN_WIDTH = 560
+const SETTINGS_MIN_HEIGHT = 400
+
+function settingsBoundsPath() {
+  return join(positionsDir(), `settings_${monitorKey()}.json`)
+}
+
+function loadSettingsBounds(): Partial<WindowLayout> | null {
+  const p = settingsBoundsPath()
+  if (!existsSync(p)) return null
+  try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return null }
+}
+
+function saveSettingsBounds(win: BrowserWindow) {
+  if (win.isDestroyed()) return
+  const [x, y] = win.getPosition()
+  const [width, height] = win.getSize()
+  const layout: WindowLayout = { x, y, width, height }
+  const dir = positionsDir()
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(settingsBoundsPath(), JSON.stringify(layout, null, 2), 'utf-8')
+}
+
 function resetWindowPositions() {
   // Delete saved file for current monitor config
   const p = positionsPath()
@@ -307,13 +399,13 @@ function registerWindowIpc() {
   ipcMain.handle('positions:reset', () => resetWindowPositions())
 }
 
-function registerDevModeIpc() {
-  ipcMain.handle('devMode:get', () => getDevMode())
+function registerPreviewModeIpc() {
+  ipcMain.handle('previewMode:get', () => getPreviewMode())
 
-  ipcMain.handle('devMode:set', (_event, patch: { enabled?: boolean; sessionType?: string }) => {
-    setDevMode(patch as any)
-    const state = getDevMode()
-    broadcastToAll('devMode:changed', state)
+  ipcMain.handle('previewMode:set', (_event, patch: { enabled?: boolean; sessionType?: string }) => {
+    setPreviewMode(patch as any)
+    const state = getPreviewMode()
+    broadcastToAll('previewMode:changed', state)
     if (tray) tray.setContextMenu(buildTrayMenu())
   })
 }
@@ -336,11 +428,23 @@ function registerUpdaterIpc() {
   ipcMain.handle('app:version',      () => app.getVersion())
 }
 
+function registerShellIpc() {
+  // Open external URLs in the user's default browser.  Only http(s) is allowed
+  // so a compromised renderer can't be tricked into launching `file://`,
+  // `javascript:`, custom URL handlers, etc.
+  ipcMain.handle('app:openExternal', (_event, url: unknown) => {
+    if (typeof url !== 'string') return
+    if (!/^https?:\/\//i.test(url)) return
+    shell.openExternal(url)
+  })
+}
+
 app.whenReady().then(async () => {
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
-  registerDevModeIpc()
+  registerPreviewModeIpc()
   registerStartupIpc()
+  registerShellIpc()
   registerUpdaterIpc()
   initUpdater(broadcastToAll)
 
@@ -384,7 +488,7 @@ app.whenReady().then(async () => {
       windows.forEach((win) => {
         win.setIgnoreMouseEvents(!editMode, { forward: true })
       })
-      broadcastToAll('overlay:editMode', editMode)
+      broadcastToOverlays('overlay:editMode', editMode)
       // Persist positions when the user locks layout
       if (!editMode) saveWindowPositions()
     },
@@ -394,7 +498,7 @@ app.whenReady().then(async () => {
   await startTelemetryPolling((telemetry: IRacingTelemetry) => {
     setOverlaysVisible(telemetry.connected)
     if (telemetry.connected) {
-      broadcastToAll('telemetry:update', telemetry)
+      broadcastToOverlays('telemetry:update', telemetry)
     }
   })
 })

@@ -101,9 +101,9 @@ iracing-overlay/
 │   │   ├── index.ts           # App entry: creates windows, tray, IPC, polling loop
 │   │   ├── iracingSdk.ts      # iRacing shared-memory reader via koffi FFI
 │   │   ├── telemetry.ts       # Polling loop + IRacingTelemetry type (main-side)
-│   │   ├── mockTelemetry.ts   # Simulated data for dev mode
+│   │   ├── mockTelemetry.ts   # Simulated data for preview mode
 │   │   ├── config.ts          # Overlay config persistence (per-user JSON files)
-│   │   ├── devMode.ts         # Dev mode state (enable/disable + session type)
+│   │   ├── previewMode.ts     # Preview mode state (enable/disable + session type)
 │   │   └── shortcuts.ts       # Global keyboard shortcuts (register/update/save)
 │   ├── preload/
 │   │   └── index.ts           # contextBridge — exposes window.iracingOverlay API
@@ -123,7 +123,7 @@ iracing-overlay/
 │       │   ├── TireTemps/     # 4-corner temp display with color coding
 │       │   └── Radar/         # Disabled (code kept for future revisit)
 │       ├── pages/
-│       │   └── Settings/      # Settings window: dev mode, shortcuts, overlay config
+│       │   └── Settings/      # Settings window: preview mode, shortcuts, overlay config
 │       └── types/
 │           ├── telemetry.ts   # IRacingTelemetry, CarTelemetry, DriverInfo, SessionType
 │           ├── overlayConfig.ts  # OverlayConfig type, defaults, mergeWithDefaults
@@ -167,7 +167,7 @@ npm run dist:pre -- rc.2
 npm run icons
 ```
 
-iRacing must be running for real telemetry. Use **Dev Mode** (Settings → Developer Mode) to show overlays with simulated data without iRacing.
+iRacing must be running for real telemetry. Use **Preview Mode** (Settings → Preview Mode) to show overlays with simulated data without iRacing.
 
 ## Tech Stack
 
@@ -192,11 +192,11 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 |---|---|---|
 | `telemetry:update` | main → renderer | Fired every poll tick (60ms) with full `IRacingTelemetry` |
 | `overlay:editMode` | main → renderer | Broadcast when layout mode toggles |
-| `devMode:changed` | main → renderer | Broadcast on dev mode state change |
+| `previewMode:changed` | main → renderer | Broadcast on preview mode state change |
 | `config:changed` | main → renderer | Broadcast when any overlay config saved |
 | `config:get` | renderer → main | Load overlay config JSON |
 | `config:set` | renderer → main | Save overlay config JSON + broadcast |
-| `devMode:get/set` | renderer → main | Read/write dev mode state |
+| `previewMode:get/set` | renderer → main | Read/write preview mode state |
 | `shortcuts:get/set` | renderer → main | Read/update global shortcuts |
 | `window:getBounds` | renderer → main | Get window's current `{x, y, width, height}` (used to lock size during drag) |
 | `window:setBounds` | renderer → main | Move + resize window during custom drag — width/height are re-asserted every frame to prevent DPI-related size creep |
@@ -208,6 +208,7 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 | `update:check` | renderer → main | Triggers `autoUpdater.checkForUpdates()` |
 | `update:download` | renderer → main | Triggers `autoUpdater.downloadUpdate()` |
 | `update:install` | renderer → main | Calls `autoUpdater.quitAndInstall()` |
+| `app:openExternal` | renderer → main | Open an http(s) URL in the user's default browser via `shell.openExternal`. Main rejects non-http(s) schemes. |
 | `update:status` | main → renderer | Broadcast on every update state transition |
 
 ### Telemetry Pipeline
@@ -216,10 +217,10 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 2. `iracingSdk.ts` reads iRacing's Windows named memory-mapped file (`Local\IRSDKMemMapFileName`) using koffi FFI calls to `OpenFileMapping` / `MapViewOfFile`
 3. Parses variable headers, builds `varMap`, reads typed values at byte offsets
 4. Constructs `IRacingTelemetry` and passes to the callback in `index.ts`
-5. `index.ts` calls `broadcastToAll('telemetry:update', telemetry)` to all overlay windows
+5. `index.ts` calls `broadcastToOverlays('telemetry:update', telemetry)` to all overlay windows. (Two fan-out helpers exist in main: `broadcastToOverlays` for high-frequency overlay-only channels like `telemetry:update` / `overlay:editMode`, and `broadcastToAll` which additionally sends to the Settings window for state-change channels like `previewMode:changed` / `config:changed` / `update:status`. The Settings UI subscribes to the latter and would miss tray-driven state changes if they fanned through `broadcastToOverlays`.)
 6. `TelemetryContext.tsx` in the renderer listens and stores in React state
 
-Dev mode bypasses iRacing entirely — `mockTelemetry.ts` generates simulated data.
+Preview mode bypasses iRacing entirely — `mockTelemetry.ts` generates simulated data.
 
 ### Overlay Config System
 
@@ -361,13 +362,15 @@ Code exists in `src/renderer/src/overlays/Radar/`. Disabled because `CarIdxF2Tim
 
 ## Settings Window (680×560)
 
-Six sections:
-1. **General** — launch-on-startup toggle (calls `app.setLoginItemSettings`; reads back on mount via `app.getLoginItemSettings`)
-2. **Updates** — current version badge + update lifecycle (check → download → restart & install); powered by `electron-updater`
-3. **Developer Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
-4. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
-5. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
-6. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button
+Sidebar-tabbed layout. The window is a fixed `<aside>` sidebar with six nav entries on the left, and a single scrollable pane on the right. State is just `useState<PaneId>('general')` in `Settings/index.tsx`; per-pane components live under `Settings/panes/`.
+
+Six panes:
+1. **General** (`panes/GeneralPane.tsx`) — launch-on-startup toggle, global `Auto-hide unsupported overlays` toggle, Overlay Positions reset (with layout-mode hint).
+2. **Overlays** (`panes/OverlaysPane.tsx`) — the per-session-type matrix grouped by overlay, with a **sticky `<thead>`** (Practice / Qualifying / Race column labels stay visible while scrolling), group headers with short overlay descriptions, and **native `title` tooltips** on every row pulling copy from `panes/../lib.ts` (`OVERLAY_DESCRIPTIONS` / `ELEMENT_DESCRIPTIONS`).
+3. **Shortcuts** (`panes/ShortcutsPane.tsx`) — live-record new shortcuts (modifier-key combos only); the recorder helpers `keyEventToAccelerator` / `formatAccelerator` live in `Settings/lib.ts`.
+4. **Preview Mode** (`panes/PreviewModePane.tsx`) — enable/disable, pick simulated session type (practice/qualifying/race).
+5. **Updates** (`panes/UpdatesPane.tsx`) — current version badge + update lifecycle (check → download → restart & install); powered by `electron-updater`.
+6. **About** (`panes/AboutPane.tsx`) — version, external links to repo / changelog / new-issue / license. Links route through the `app:openExternal` IPC so they open in the user's default browser instead of hijacking the Settings window. Main-process side validates the URL is http(s) before calling `shell.openExternal`.
 
 IPC channels for startup: `startup:get` (returns `boolean`) and `startup:set` (accepts `boolean`). Both call Electron's `app.getLoginItemSettings()` / `app.setLoginItemSettings()` which writes the Windows login item registry key — no additional libraries needed.
 

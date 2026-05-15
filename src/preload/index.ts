@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-export interface DevModeState {
+export interface PreviewModeState {
   enabled: boolean
   sessionType: 'practice' | 'qualifying' | 'race'
 }
@@ -17,8 +17,8 @@ const iracingOverlay = {
   onEditMode: (callback: (enabled: boolean) => void) => {
     ipcRenderer.on('overlay:editMode', (_event, enabled) => callback(enabled))
   },
-  onDevModeChanged: (callback: (state: DevModeState) => void) => {
-    ipcRenderer.on('devMode:changed', (_event, state) => callback(state))
+  onPreviewModeChanged: (callback: (state: PreviewModeState) => void) => {
+    ipcRenderer.on('previewMode:changed', (_event, state) => callback(state))
   },
   onConfigChanged: (callback: (data: { overlay: string; config: unknown }) => void) => {
     ipcRenderer.on('config:changed', (_event, data) => callback(data))
@@ -29,11 +29,11 @@ const iracingOverlay = {
   setConfig: (overlay: string, config: unknown): Promise<void> => {
     return ipcRenderer.invoke('config:set', overlay, config)
   },
-  getDevMode: (): Promise<DevModeState> => {
-    return ipcRenderer.invoke('devMode:get')
+  getPreviewMode: (): Promise<PreviewModeState> => {
+    return ipcRenderer.invoke('previewMode:get')
   },
-  setDevMode: (patch: Partial<DevModeState>): Promise<void> => {
-    return ipcRenderer.invoke('devMode:set', patch)
+  setPreviewMode: (patch: Partial<PreviewModeState>): Promise<void> => {
+    return ipcRenderer.invoke('previewMode:set', patch)
   },
   getShortcuts: (): Promise<ShortcutMap> => {
     return ipcRenderer.invoke('shortcuts:get')
@@ -76,6 +76,12 @@ const iracingOverlay = {
   },
   installUpdate: (): Promise<void> => {
     return ipcRenderer.invoke('update:install')
+  },
+  // Open an http(s) URL in the user's default browser.  Main-process side
+  // validates the scheme so a compromised renderer can't launch arbitrary
+  // protocols.
+  openExternal: (url: string): Promise<void> => {
+    return ipcRenderer.invoke('app:openExternal', url)
   },
   onUpdateStatus: (callback: (status: unknown) => void) => {
     ipcRenderer.on('update:status', (_event, status) => callback(status))
