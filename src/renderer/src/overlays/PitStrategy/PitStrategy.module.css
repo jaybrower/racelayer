@@ -74,6 +74,25 @@
   margin-bottom: 6px;
 }
 
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.sectionHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+.stintBadge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
 .statRow {
   display: flex;
   justify-content: space-between;
@@ -121,17 +140,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Baseline (session best) row */
-.baselineRow {
-  display: grid;
-  grid-template-columns: 28px 1fr 40px;
-  align-items: center;
-  padding: 3px 0 5px;
-  gap: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  margin-bottom: 4px;
-}
-
 .bestBadge {
   font-size: 9px;
   font-weight: 700;
@@ -140,13 +148,37 @@
   text-align: right;
 }
 
-/* Recent lap rows */
-.recentLaps {
-  display: flex;
-  flex-direction: column;
+.lastBadge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  text-align: right;
 }
 
-/* Average degradation — headline number */
+/* Secondary stint-best delta row (smaller than the headline trend) */
+.stintBestRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.stintBestLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.stintBestValue {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Headline trend number (last lap vs avg of prior up-to-3 stint laps) */
 .degAvg {
   display: flex;
   align-items: baseline;

@@ -17,12 +17,6 @@ function formatTime(s: number): string {
   return `${m}:${sec}`
 }
 
-function formatDelta(s: number): string {
-  if (s === 0) return 'BEST'
-  const sign = s > 0 ? '+' : ''
-  return `${sign}${s.toFixed(3)}`
-}
-
 interface LapRecord {
   lap: number
   time: number
@@ -140,34 +134,52 @@ export default function PitStrategy() {
 
     const pitLap = lapsOnFuel > 0 ? Math.floor(t.lap + lapsOnFuel - 0.5) : null
 
-    // ── Tire deg: session-best baseline + recent wear laps ──────────────────────
-    // Only clean flying laps count toward tire-deg analysis.  Out-laps, in-laps,
-    // and laps containing a full pit stop are dropped — their times reflect pit
-    // activity, not tire wear, and would otherwise pollute both the best-lap
-    // baseline and the recent-laps "wear" sample.
-    const flyingLaps = lapHistory.filter((r) => !r.pitAffected)
+    // ── Tire deg: stint-scoped pace trend ──────────────────────────────────────
+    // A "stint" is the contiguous run of clean flying laps since the most recent
+    // pit-affected lap (out-lap, in-lap, or full pit stop).  Walk backwards from
+    // the end of history; everything after the last pitAffected lap is the
+    // current stint.  Session-best is *not* the reference here — only this
+    // stint's data matters for tire wear, since a fresh-tire run an hour ago
+    // tells us nothing about the current set.
+    const currentStint: LapRecord[] = []
+    for (let i = lapHistory.length - 1; i >= 0; i--) {
+      if (lapHistory[i].pitAffected) break
+      currentStint.unshift(lapHistory[i])
+    }
 
-    // Fastest lap of the session — this is the rolling baseline.
-    // It moves forward as the driver improves during warm-up, then locks in at peak.
-    const fastestLap = flyingLaps.length > 0
-      ? flyingLaps.reduce((best, r) => r.time < best.time ? r : best)
+    const lastLap = currentStint.length > 0 ? currentStint[currentStint.length - 1] : null
+
+    // Stint best — fastest lap within the current stint.  Equals lastLap on a
+    // 1-lap stint or whenever the latest lap is the new best.
+    const stintBest = currentStint.length > 0
+      ? currentStint.reduce((best, r) => r.time < best.time ? r : best)
       : null
 
-    // Up to 3 most recent flying laps that aren't the fastest lap.
-    // Excluding the best means this window shows actual wear laps, not the peak.
-    const recentLaps = fastestLap
-      ? flyingLaps.filter(r => r !== fastestLap).slice(-3)
-      : []
+    // ── Headline trend: last lap vs avg of the up-to-3 prior stint laps ──────
+    // Directional indicator — "am I getting faster or slower right now?"
+    // After s1: null (no prior laps).  After s2: 1-sample comparison (muted in
+    // UI).  After s4+: full 3-lap window.  A bad lap in the prior window will
+    // *help* the next lap's trend (inflated baseline → next lap looks fast);
+    // this is a known behaviour, not a bug — it self-corrects as the outlier
+    // rolls out of the window.
+    const priorLaps = currentStint.slice(-4, -1)
+    const trendDelta = lastLap && priorLaps.length > 0
+      ? lastLap.time - (priorLaps.reduce((s, r) => s + r.time, 0) / priorLaps.length)
+      : null
+    const trendMature = priorLaps.length >= 3
 
-    // Average delta of those ≤3 laps vs the best — the headline tire wear number.
-    // Positive = slower than best = tires wearing. Grows as deg worsens.
-    const avgDelta = fastestLap && recentLaps.length > 0
-      ? recentLaps.reduce((sum, r) => sum + (r.time - fastestLap.time), 0) / recentLaps.length
+    // ── Stint-best delta: last lap vs the stint's fastest lap ────────────────
+    // "How off-peak am I?" — always ≥ 0, equals 0 when the latest lap *is*
+    // the stint best.
+    const stintBestDelta = lastLap && stintBest
+      ? lastLap.time - stintBest.time
       : null
 
     return {
       fuelPerLap, lapsOnFuel, hasReliableEstimate, pitLap,
-      fastestLap, recentLaps, avgDelta,
+      currentStint, lastLap, stintBest,
+      trendDelta, trendMature, priorCount: priorLaps.length,
+      stintBestDelta,
     }
   }, [t.fuelLevel, t.fuelUsePerHour, t.lap, t.lapLastLapTime])
 
@@ -187,6 +199,10 @@ export default function PitStrategy() {
   }
 
   if (!config.pitStrategy.enabled[sType] && !editMode) return null
+
+  // Hide entirely when the driver is in an iRacing menu (garage / get-in-car /
+  // replay / spectator). Edit mode bypasses this so overlays can be positioned.
+  if (t.connected && !t.isOnTrack && !editMode) return null
 
   if (!t.connected) {
     return (
@@ -234,54 +250,68 @@ export default function PitStrategy() {
         </div>
       )}
 
-      {/* Tire degradation */}
-      {showTireDeg && stats.fastestLap && (
+      {/* Tire degradation — stint-scoped pace trend */}
+      {showTireDeg && stats.lastLap && stats.stintBest && (
         <div className={styles.section}>
-          <div className={styles.sectionTitle}>TIRE DEG</div>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionTitle}>TIRE DEG</span>
+            <span className={styles.stintBadge}>
+              Stint of {stats.currentStint.length}
+            </span>
+          </div>
 
-          {/* Baseline — session fastest lap */}
-          <div className={styles.baselineRow}>
-            <span className={styles.lapNum}>L{stats.fastestLap.lap}</span>
-            <span className={styles.lapTime}>{formatTime(stats.fastestLap.time)}</span>
+          {/* Stint best lap */}
+          <div className={styles.lapRow}>
+            <span className={styles.lapNum}>L{stats.stintBest.lap}</span>
+            <span className={styles.lapTime}>{formatTime(stats.stintBest.time)}</span>
             <span className={styles.bestBadge}>BEST</span>
           </div>
 
-          {/* Up to 3 most recent non-best laps with delta to best */}
-          {stats.recentLaps.length > 0 && (
-            <div className={styles.recentLaps}>
-              {stats.recentLaps.map((rec) => {
-                const delta = rec.time - stats.fastestLap!.time
-                return (
-                  <div className={styles.lapRow} key={rec.lap}>
-                    <span className={styles.lapNum}>L{rec.lap}</span>
-                    <span className={styles.lapTime}>{formatTime(rec.time)}</span>
-                    <span
-                      className={styles.lapDiff}
-                      style={{ color: delta <= 0 ? '#4ade80' : delta < 0.3 ? '#94a3b8' : delta < 0.8 ? '#fbbf24' : '#f87171' }}
-                    >
-                      {formatDelta(delta)}
-                    </span>
-                  </div>
-                )
-              })}
+          {/* Last lap — only render if it isn't the stint best */}
+          {stats.lastLap !== stats.stintBest && (
+            <div className={styles.lapRow}>
+              <span className={styles.lapNum}>L{stats.lastLap.lap}</span>
+              <span className={styles.lapTime}>{formatTime(stats.lastLap.time)}</span>
+              <span className={styles.lastBadge}>LAST</span>
             </div>
           )}
 
-          {/* Average deg — the headline number */}
-          {stats.avgDelta !== null && (
+          {/* Headline trend: last lap vs prior up-to-3 in stint */}
+          {stats.trendDelta !== null && stats.priorCount > 0 && (
             <div className={styles.degAvg}>
               <span className={styles.degAvgLabel}>
-                AVG LAST {stats.recentLaps.length} vs BEST
+                vs LAST {stats.priorCount}
               </span>
               <span
                 className={styles.degAvgValue}
                 style={{
-                  color: stats.avgDelta <= 0.1 ? '#4ade80'
-                       : stats.avgDelta <= 0.5 ? '#fbbf24'
+                  color: !stats.trendMature
+                    ? '#64748b'
+                    : stats.trendDelta <= -0.05 ? '#4ade80'
+                    : stats.trendDelta <= 0.05 ? '#cbd5e1'
+                    : stats.trendDelta <= 0.30 ? '#fbbf24'
+                    : '#f87171',
+                  opacity: stats.trendMature ? 1 : 0.55,
+                }}
+              >
+                {stats.trendDelta > 0 ? '+' : ''}{stats.trendDelta.toFixed(3)}s
+              </span>
+            </div>
+          )}
+
+          {/* Stint-best delta (smaller, secondary) */}
+          {stats.stintBestDelta !== null && stats.currentStint.length > 1 && (
+            <div className={styles.stintBestRow}>
+              <span className={styles.stintBestLabel}>vs STINT BEST</span>
+              <span
+                className={styles.stintBestValue}
+                style={{
+                  color: stats.stintBestDelta <= 0.1 ? '#94a3b8'
+                       : stats.stintBestDelta <= 0.5 ? '#fbbf24'
                        : '#f87171'
                 }}
               >
-                +{stats.avgDelta.toFixed(3)}s
+                +{stats.stintBestDelta.toFixed(3)}s
               </span>
             </div>
           )}

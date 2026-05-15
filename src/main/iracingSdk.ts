@@ -386,6 +386,10 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
 
   return {
     connected:          true,
+    // IsOnTrack is true only when the driver is in their cockpit and the
+    // session is live — false in garage, get-in-car screen, replays, and
+    // spectator mode. Used by overlays to hide when not actively driving.
+    isOnTrack:          rb(buf, D, 'IsOnTrack'),
     sessionType,
     sessionTime:        rd(buf, D, 'SessionTime'),
     sessionTimeRemain:  rd(buf, D, 'SessionTimeRemain'),
@@ -442,7 +446,7 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
 }
 
 const DISCONNECTED: IRacingTelemetry = {
-  connected: false, sessionType: 'unknown',
+  connected: false, isOnTrack: false, sessionType: 'unknown',
   sessionTime: 0, sessionTimeRemain: 0, playerCarIdx: 0, playerCarRedLine: 0,
   speed: 0, gear: 0, rpm: 0, throttle: 0, brake: 0,
   fuelLevel: 0, fuelUsePerHour: 0,

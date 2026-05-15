@@ -13,6 +13,8 @@
 >
 > **Why this shape:** features get smaller, more focused PRs into the release branch; pre-release builds can be cut from `release/*` without disturbing `main`; `main`'s history reads as a release log. One release branch is open at a time so feature targeting stays simple.
 >
+> **Every PR must reference a GitHub issue.** The issue captures the *why* (problem, desired behaviour, acceptance criteria); the PR captures the *how* (implementation). Before starting a feature, either pick an existing issue or open one. The PR body must include `Closes #N` (or `Fixes #N` / `Resolves #N`) so the issue auto-closes on merge and the link is visible from both views. If no issue exists yet when the user describes a task, the assistant should propose one (title + acceptance criteria) and confirm with the user before opening it. **Exception:** trivial behaviour-preserving PRs (typo fixes, formatting) may skip the issue.
+>
 > **Start-of-session recipe** — always branch features from `main`, not from the active release branch:
 > ```bash
 > git checkout main && git pull
@@ -54,13 +56,31 @@
 > git merge main && git push
 > ```
 >
+> **Issue lifecycle through the release cycle:** Linked issues do **not** auto-close when their PR merges into a `release/v*` branch — GitHub's native `Closes #N` only fires on merge to the default branch. Instead, the `Label Merged Issues` workflow applies the `ready-to-release` label to each referenced issue on release-branch merge, so the milestone view stays useful:
+>
+> - **Open + unlabeled** → work not yet merged
+> - **Open + `ready-to-release`** → code merged, awaiting release
+> - **Closed** → shipped to users
+>
+> Filter the backlog with `is:open -label:ready-to-release` to see only actively-pending work.
+>
+> When a release ships (release/v* → main merges and the new build is published), close all the `ready-to-release` issues for that milestone in one shot:
+>
+> ```bash
+> gh issue list --label ready-to-release --milestone v0.1.3 \
+>   --state open --json number --jq '.[].number' \
+>   | xargs -I{} gh issue close {} --reason completed
+> ```
+>
 > **Branch naming:** keep names short and conventional-commits-aligned — `feat/closing-rate`, `fix/pit-mode-gap`, `chore/branch-policy-update`. Release branches always carry the `v` prefix to match git tags: `release/v0.1.3`, never `release/0.1.3`.
+>
+> **Release-notes enforcement:** Every PR targeting a `release/v*` branch must modify the corresponding `release-notes/vX.Y.Z.md` file. Enforced by the `Require Release Notes` GitHub Action (`.github/workflows/require-release-notes.yml`). Bypass with the `no-release-notes` label on the PR for pure refactors or behaviour-preserving changes where `Internal: (none)` is the honest answer — the workflow re-runs on label add/remove, so applying the label turns the failing check green without a force-push.
 
 ## What This Is
 
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
 
-App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.2`
+App name: **RaceLayer** | Package name: `racelayer` | Version: `0.1.3`
 GitHub: `https://github.com/jaybrower/racelayer`
 
 ## Project Structure
@@ -122,6 +142,13 @@ npm run dist
 
 # Build without packaging (for testing the built output)
 npm run dist:dir
+
+# Build a pre-release package (version override only — package.json unchanged)
+# Produces e.g. RaceLayer-0.1.3-beta.1.exe in dist/
+# Upload to a GitHub --prerelease release; do NOT upload latest.yml or stable
+# users will be offered this build via auto-update.
+npm run dist:pre -- beta.1
+npm run dist:pre -- rc.2
 
 # Regenerate app icons from scratch
 npm run icons
@@ -260,6 +287,8 @@ function computeRelativeGap(car, playerLapDistPct, playerLap, referenceLapTime) 
 
 ## Overlay Details
 
+**Cockpit-only rendering:** Every overlay hides itself when `t.connected && !t.isOnTrack` (driver is in the garage, get-in-car screen, replay, or spectator mode) — the BrowserWindow stays open but the React component returns null. The check is bypassed in edit mode so overlays can be positioned even when the user isn't actually driving. `t.isOnTrack` maps directly to the SDK's `IsOnTrack` irsdk_bool. The disconnect-state "Waiting for iRacing…" message still shows when `!t.connected` so the user knows the overlay is alive and the app is just waiting for the sim to start.
+
 ### Gauges (`/gauges`, 860×180)
 RPM bar, throttle/brake input trace, gear indicator, speed, lap delta to best, fuel level, TC and ABS indicators. Each element independently configurable per session type.
 
@@ -299,12 +328,17 @@ Only meaningful in official race sessions; always computed but shown/hidden via 
 ### Pit Strategy (`/pit-strategy`, 360×420)
 Three sections (each independently toggled via config):
 - **Fuel** — current level, per-lap consumption (measured at lap boundaries), laps remaining
-- **Tire Deg** — session-best lap as rolling baseline (updates while improving, locks at peak); up to 3 most recent non-best laps with delta to best; prominent avg-delta headline number
+- **Tire Deg** — stint-scoped pace trend: stint best + last lap, headline trend (last vs avg of up-to-3 prior stint laps), secondary stint-best delta
 - **Pit Window** — estimated last lap to pit based on current fuel
 
-**Tire Deg logic:** `fastestLap = flyingLaps.reduce(min by time)` — recalculated every render from the **flying-laps subset** of history (`lapHistory.filter(r => !r.pitAffected)`) so it always reflects the true session best on clean tires. Recent laps exclude the fastest lap so the display shows actual wear laps, not the peak repeated. `avgDelta` is the mean of those ≤3 laps' delta to best. Color thresholds: green ≤ 0.1s, amber ≤ 0.5s, red > 0.5s. All laps kept in `lapHistoryRef` (max 30); diffs computed at render time, never stored.
+**Tire Deg logic (stint-scoped):** A "stint" is the contiguous run of clean flying laps since the most recent pit-affected lap. Computed by walking back from the end of `lapHistory` until a `pitAffected` lap is hit — everything after that is the current stint. Two numbers are derived:
 
-**Pit-affected lap filtering:** Each `LapRecord` carries a `pitAffected: boolean` flag indicating whether the player was on pit road at any point during that lap (out-lap, in-lap, or a full pit stop mid-lap). A sticky `wasInPitThisLapRef` is OR'd with the player's per-tick `inPit` state and committed into the record at lap completion, then reset for the new lap. It's initialized to `true` at session start (every session begins with the player in the pit stall, so lap 1 is always an out-lap). Pit-affected laps are filtered out of *both* the best-lap baseline and the recent-laps display — otherwise an out-lap's time would either become a fake "best" or get fed into the avg-deg headline number as catastrophic wear.
+1. **Headline trend** = `lastLap.time − avg(prior up-to-3 stint laps)`. Directional ("am I getting faster or slower?"). Null on s1; muted styling until the window has 3 prior samples (s4+). Color thresholds: green ≤ −0.05s (improving), neutral grey −0.05 to +0.05s, amber to +0.30s, red > +0.30s. A bad lap in the prior window inflates the baseline so the next lap reads artificially fast — known behaviour, self-corrects as the outlier rolls out.
+2. **Stint-best delta** = `lastLap.time − stintBest.time`. Always ≥ 0. Smaller / secondary in the UI. "How off-peak am I right now?" Color: grey ≤ 0.1s, amber ≤ 0.5s, red > 0.5s.
+
+Session-best is *not* referenced here — a fresh-tire run from an earlier stint tells you nothing about the current set. All laps kept in `lapHistoryRef` (max 30); deltas computed at render time, never stored.
+
+**Pit-affected lap filtering:** Each `LapRecord` carries a `pitAffected: boolean` flag indicating whether the player was on pit road at any point during that lap (out-lap, in-lap, or a full pit stop mid-lap). A sticky `wasInPitThisLapRef` is OR'd with the player's per-tick `inPit` state and committed into the record at lap completion, then reset for the new lap. It's initialized to `true` at session start (every session begins with the player in the pit stall, so lap 1 is always an out-lap). The pit-affected flag both **filters laps from the stint** (a pit-affected lap is the stint boundary) and **resets the stint** — completing an in-lap/pit-lap immediately starts a fresh stint on the next clean lap.
 
 ### Tire Temps (`/tire-temps`, 220×145)
 4-corner colored blocks (inner/mid/outer). Color scale: `#1e293b` (cold/no data) → blue → green → yellow → red (hot). Uses surface temps if available, falls back to carcass temps (logged to console at connect time).

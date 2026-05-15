@@ -379,6 +379,10 @@ export default function Relative() {
 
   if (!config.relative.enabled[sType] && !editMode) return null
 
+  // Hide entirely when the driver is in an iRacing menu (garage / get-in-car /
+  // replay / spectator). Edit mode bypasses this so overlays can be positioned.
+  if (telemetry.connected && !telemetry.isOnTrack && !editMode) return null
+
   const sessionLabel: Record<SessionType, string> = {
     practice: 'PRACTICE', qualifying: 'QUALIFY', race: 'RACE', unknown: '---',
   }
