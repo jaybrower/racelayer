@@ -54,6 +54,41 @@
   overflow-y: auto;
 }
 
+/* ── Scrollbars ────────────────────────────────────────────────────────────
+   Replace the OS default scrollbar (~17px, opaque) with a thin themed one
+   for the two scrollable regions in the Settings window.  Electron is
+   always Chromium so the `::-webkit-scrollbar` pseudo-elements give us
+   full control without needing the standards-track `scrollbar-*` properties.
+   Track stays transparent so it disappears when there's nothing to scroll;
+   thumb is barely-visible at rest and brightens on hover. */
+.sidebar::-webkit-scrollbar,
+.pane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.pane::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.pane::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.sidebar::-webkit-scrollbar-corner,
+.pane::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .navBtn {
   display: flex;
   align-items: center;
