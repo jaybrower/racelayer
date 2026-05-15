@@ -16,9 +16,9 @@ Run each release candidate through these combinations at least once:
 
 | Mode | Telemetry | Notes |
 |---|---|---|
-| **Dev mode (race)**          | `mockTelemetry.ts` | Fast loop; use for UI checks |
-| **Dev mode (qualifying)**    | `mockTelemetry.ts` | Verify session-type-conditional UI |
-| **Dev mode (practice)**      | `mockTelemetry.ts` | Verify `lap=0` / `position=0` edge handling |
+| **Preview mode (race)**      | `mockTelemetry.ts` | Fast loop; use for UI checks |
+| **Preview mode (qualifying)**| `mockTelemetry.ts` | Verify session-type-conditional UI |
+| **Preview mode (practice)**  | `mockTelemetry.ts` | Verify `lap=0` / `position=0` edge handling |
 | **Live (offline test)**      | iRacing offline session | Real SDK plumbing without paying for an iRating dip |
 | **Live (race)**              | iRacing official race  | Only for milestone releases — the real proving ground |
 
@@ -33,7 +33,7 @@ Before tagging any build (including beta/RC) walk this short loop:
 - [ ] All four overlays appear with mock data (Relative, Gauges, Pit Strategy, Tire Temps)
 - [ ] Tray icon appears; right-click shows menu
 - [ ] Settings window opens via tray menu
-- [ ] Settings → Developer Mode toggle works; overlays react immediately
+- [ ] Settings → Preview Mode toggle works; overlays react immediately
 - [ ] `Ctrl+Shift+L` enters/exits layout mode; overlays show edit banner
 - [ ] `Ctrl+Shift+O` opens Settings (verify it still works after the shortcut was just toggled)
 - [ ] Quit via tray menu — no zombie processes left in Task Manager
@@ -45,7 +45,7 @@ If any of those fail, stop and fix before tagging.
 ## App lifecycle
 
 - [ ] **First launch** — fresh install (or after deleting `<userData>`): all overlays appear at sensible default positions, no error toasts, no console errors.
-- [ ] **Subsequent launch** — positions, dev mode state, shortcuts, and overlay config persist from the previous run.
+- [ ] **Subsequent launch** — positions, shortcuts, and overlay config persist from the previous run. (Preview Mode intentionally does not persist — it resets to off on every launch.)
 - [ ] **Launch on startup** — toggling Settings → General → "Launch on startup" updates `app.getLoginItemSettings()`. Reboot Windows; RaceLayer auto-launches.
 - [ ] **Tray icon** — right-click shows menu, double-click opens settings (or whatever the default is), icon disappears cleanly on quit.
 - [ ] **Quit from tray** — process exits, no orphaned `electron.exe` instances.
@@ -167,7 +167,7 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 ### Radar
 
 - [ ] **In a live iRacing pack** — when a car comes alongside, the matching edge of the Radar lights amber. (Pre-v0.1.4 this was off by one: "clear" rendered as "car on left". Verify in a real session, not mock data.)
-- [ ] **Mock data sanity** — in dev mode, the side-edge highlight alternates between left and right as the mock cycles `CarLeftRight` through 2 → 3 → 4 → 5 → 6.
+- [ ] **Mock data sanity** — in preview mode, the side-edge highlight alternates between left and right as the mock cycles `CarLeftRight` through 2 → 3 → 4 → 5 → 6.
 
 ---
 
@@ -175,7 +175,7 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 
 - [ ] **General** — startup toggle round-trips with Windows login items.
 - [ ] **Updates** — current version badge shows the package.json version. (See **Updater** section below for the rest.)
-- [ ] **Developer Mode** — toggle on: overlays receive mock data immediately. Pick a session type (practice / qualifying / race); the Relative overlay updates its column visibility accordingly within a second or two.
+- [ ] **Preview Mode** — toggle on: overlays receive mock data immediately. Pick a session type (practice / qualifying / race); the Relative overlay updates its column visibility accordingly within a second or two.
 - [ ] **Keyboard Shortcuts** — change a shortcut to a different modifier combo (e.g. `Ctrl+Alt+L`). Verify the new combo works and the old combo does NOT.
 - [ ] **Shortcut conflict detection** — try to bind two actions to the same combo. The UI should refuse / warn.
 - [ ] **Overlay Visibility** — flip a per-session-type checkbox. The corresponding overlay/column hides immediately.
@@ -196,7 +196,7 @@ Don't skip this — broken auto-update is the worst class of bug.
 
 - [ ] Change overlay-visibility checkboxes, restart the app. Settings persist.
 - [ ] Change shortcuts, restart. Persist.
-- [ ] Change dev-mode state, restart. Persists.
+- [ ] **Preview Mode does not persist** — turn it on, restart the app. Comes back off (this is intentional — Preview Mode is session-only).
 - [ ] Drag an overlay, restart. Position persists for the current monitor config.
 - [ ] **Forward-compat (rare but important)** — copy your `<userData>/overlays.json` aside, install an older RaceLayer build (e.g. v0.1.2), let it overwrite the config, then install the new build again. New fields should pick up their default values without crashing; existing values preserve. This is the `mergeWithDefaults` guarantee — automated tests cover the function but verify the round-trip at least once per release manually.
 
@@ -213,7 +213,7 @@ Approximate guardrails. If any of these get noticeably worse vs. the previous re
 
 ---
 
-## Known-good console output (dev mode)
+## Known-good console output (preview mode)
 
 When `npm run dev` runs cleanly:
 

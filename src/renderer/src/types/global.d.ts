@@ -1,4 +1,4 @@
-interface DevModeState {
+interface PreviewModeState {
   enabled: boolean
   sessionType: 'practice' | 'qualifying' | 'race'
 }
@@ -21,12 +21,12 @@ interface Window {
   iracingOverlay: {
     onTelemetryUpdate: (callback: (data: unknown) => void) => void
     onEditMode: (callback: (enabled: boolean) => void) => void
-    onDevModeChanged: (callback: (state: DevModeState) => void) => void
+    onPreviewModeChanged: (callback: (state: PreviewModeState) => void) => void
     onConfigChanged: (callback: (data: { overlay: string; config: unknown }) => void) => void
     getConfig: (overlay: string) => Promise<unknown>
     setConfig: (overlay: string, config: unknown) => Promise<void>
-    getDevMode: () => Promise<DevModeState>
-    setDevMode: (patch: Partial<DevModeState>) => Promise<void>
+    getPreviewMode: () => Promise<PreviewModeState>
+    setPreviewMode: (patch: Partial<PreviewModeState>) => Promise<void>
     getShortcuts: () => Promise<ShortcutMap>
     setShortcut: (key: string, accel: string) => Promise<{ ok: boolean; error?: string }>
     resetPositions: () => Promise<void>

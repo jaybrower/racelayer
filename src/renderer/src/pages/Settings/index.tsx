@@ -241,7 +241,7 @@ function OverlayConfigSection() {
   )
 }
 
-const DEFAULT_DEV: DevModeState = { enabled: false, sessionType: 'race' }
+const DEFAULT_PREVIEW: PreviewModeState = { enabled: false, sessionType: 'race' }
 const DEFAULT_SHORTCUTS: ShortcutMap = {
   editMode: 'CommandOrControl+Shift+L',
   openSettings: 'CommandOrControl+Shift+O',
@@ -372,7 +372,7 @@ function ShortcutRow({ label, sub, value, onSave }: ShortcutRowProps) {
 // ── Settings page ────────────────────────────────────────────────────────────
 
 export default function Settings() {
-  const [devMode, setDevModeLocal] = useState<DevModeState>(DEFAULT_DEV)
+  const [previewMode, setPreviewModeLocal] = useState<PreviewModeState>(DEFAULT_PREVIEW)
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(DEFAULT_SHORTCUTS)
   const [saving, setSaving] = useState(false)
   const [launchOnStartup, setLaunchOnStartup] = useState(false)
@@ -380,16 +380,16 @@ export default function Settings() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
 
   useEffect(() => {
-    window.iracingOverlay.getDevMode().then(setDevModeLocal)
+    window.iracingOverlay.getPreviewMode().then(setPreviewModeLocal)
     window.iracingOverlay.getShortcuts().then(setShortcuts)
     window.iracingOverlay.getStartupEnabled().then(setLaunchOnStartup)
     window.iracingOverlay.getVersion().then(setAppVersion)
     window.iracingOverlay.getUpdateStatus().then(setUpdateStatus)
 
-    window.iracingOverlay.onDevModeChanged(setDevModeLocal)
+    window.iracingOverlay.onPreviewModeChanged(setPreviewModeLocal)
     window.iracingOverlay.onUpdateStatus(setUpdateStatus)
     return () => {
-      window.iracingOverlay.removeAllListeners('devMode:changed')
+      window.iracingOverlay.removeAllListeners('previewMode:changed')
       window.iracingOverlay.removeAllListeners('update:status')
     }
   }, [])
@@ -399,10 +399,10 @@ export default function Settings() {
     await window.iracingOverlay.setStartupEnabled(enabled)
   }, [])
 
-  const applyDevPatch = useCallback(async (patch: Partial<DevModeState>) => {
+  const applyPreviewPatch = useCallback(async (patch: Partial<PreviewModeState>) => {
     setSaving(true)
-    setDevModeLocal(prev => ({ ...prev, ...patch }))
-    await window.iracingOverlay.setDevMode(patch)
+    setPreviewModeLocal(prev => ({ ...prev, ...patch }))
+    await window.iracingOverlay.setPreviewMode(patch)
     setSaving(false)
   }, [])
 
@@ -421,7 +421,7 @@ export default function Settings() {
         <span className={styles.headerIcon}>⚙</span>
         <div>
           <div className={styles.headerTitle}>RaceLayer Settings</div>
-          <div className={styles.headerSub}>Configure overlays and developer tools</div>
+          <div className={styles.headerSub}>Configure overlays, shortcuts, and preview mode</div>
         </div>
       </div>
 
@@ -550,22 +550,22 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Developer Mode */}
+        {/* Preview Mode */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
-            <span className={styles.sectionTitle}>Developer Mode</span>
+            <span className={styles.sectionTitle}>Preview Mode</span>
           </div>
           <div className={styles.sectionBody}>
             <div className={styles.statusRow}>
-              <span className={`${styles.devBadge} ${devMode.enabled ? styles.devBadgeOn : styles.devBadgeOff}`}>
-                <span className={`${styles.dot} ${devMode.enabled ? styles.dotOn : styles.dotOff}`} />
-                {devMode.enabled ? 'ACTIVE' : 'INACTIVE'}
+              <span className={`${styles.devBadge} ${previewMode.enabled ? styles.devBadgeOn : styles.devBadgeOff}`}>
+                <span className={`${styles.dot} ${previewMode.enabled ? styles.dotOn : styles.dotOff}`} />
+                {previewMode.enabled ? 'ACTIVE' : 'INACTIVE'}
               </span>
             </div>
 
             <div className={styles.toggleRow}>
               <div className={styles.toggleInfo}>
-                <div className={styles.toggleLabel}>Enable Dev Mode</div>
+                <div className={styles.toggleLabel}>Enable Preview Mode</div>
                 <div className={styles.toggleDesc}>
                   Show overlays with simulated data without iRacing running.
                   Useful for testing layout and positioning.
@@ -574,9 +574,9 @@ export default function Settings() {
               <label className={styles.toggle}>
                 <input
                   type="checkbox"
-                  checked={devMode.enabled}
+                  checked={previewMode.enabled}
                   disabled={saving}
-                  onChange={(e) => applyDevPatch({ enabled: e.target.checked })}
+                  onChange={(e) => applyPreviewPatch({ enabled: e.target.checked })}
                 />
                 <span className={styles.toggleTrack} />
                 <span className={styles.toggleThumb} />
@@ -584,7 +584,7 @@ export default function Settings() {
             </div>
 
             <div className={styles.sessionTypeRow}>
-              <div className={styles.sessionTypeLabel}>Test Session Type</div>
+              <div className={styles.sessionTypeLabel}>Preview Session Type</div>
               <div className={styles.radioGroup}>
                 {(['practice', 'qualifying', 'race'] as const).map((type) => (
                   <label key={type} className={styles.radioBtn}>
@@ -592,9 +592,9 @@ export default function Settings() {
                       type="radio"
                       name="sessionType"
                       value={type}
-                      checked={devMode.sessionType === type}
-                      disabled={!devMode.enabled || saving}
-                      onChange={() => applyDevPatch({ sessionType: type })}
+                      checked={previewMode.sessionType === type}
+                      disabled={!previewMode.enabled || saving}
+                      onChange={() => applyPreviewPatch({ sessionType: type })}
                     />
                     <span className={styles.radioBtnLabel}>
                       {type.charAt(0).toUpperCase() + type.slice(1)}

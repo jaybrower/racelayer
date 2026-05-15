@@ -101,9 +101,9 @@ iracing-overlay/
 │   │   ├── index.ts           # App entry: creates windows, tray, IPC, polling loop
 │   │   ├── iracingSdk.ts      # iRacing shared-memory reader via koffi FFI
 │   │   ├── telemetry.ts       # Polling loop + IRacingTelemetry type (main-side)
-│   │   ├── mockTelemetry.ts   # Simulated data for dev mode
+│   │   ├── mockTelemetry.ts   # Simulated data for preview mode
 │   │   ├── config.ts          # Overlay config persistence (per-user JSON files)
-│   │   ├── devMode.ts         # Dev mode state (enable/disable + session type)
+│   │   ├── previewMode.ts     # Preview mode state (enable/disable + session type)
 │   │   └── shortcuts.ts       # Global keyboard shortcuts (register/update/save)
 │   ├── preload/
 │   │   └── index.ts           # contextBridge — exposes window.iracingOverlay API
@@ -123,7 +123,7 @@ iracing-overlay/
 │       │   ├── TireTemps/     # 4-corner temp display with color coding
 │       │   └── Radar/         # Disabled (code kept for future revisit)
 │       ├── pages/
-│       │   └── Settings/      # Settings window: dev mode, shortcuts, overlay config
+│       │   └── Settings/      # Settings window: preview mode, shortcuts, overlay config
 │       └── types/
 │           ├── telemetry.ts   # IRacingTelemetry, CarTelemetry, DriverInfo, SessionType
 │           ├── overlayConfig.ts  # OverlayConfig type, defaults, mergeWithDefaults
@@ -167,7 +167,7 @@ npm run dist:pre -- rc.2
 npm run icons
 ```
 
-iRacing must be running for real telemetry. Use **Dev Mode** (Settings → Developer Mode) to show overlays with simulated data without iRacing.
+iRacing must be running for real telemetry. Use **Preview Mode** (Settings → Preview Mode) to show overlays with simulated data without iRacing.
 
 ## Tech Stack
 
@@ -192,11 +192,11 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 |---|---|---|
 | `telemetry:update` | main → renderer | Fired every poll tick (60ms) with full `IRacingTelemetry` |
 | `overlay:editMode` | main → renderer | Broadcast when layout mode toggles |
-| `devMode:changed` | main → renderer | Broadcast on dev mode state change |
+| `previewMode:changed` | main → renderer | Broadcast on preview mode state change |
 | `config:changed` | main → renderer | Broadcast when any overlay config saved |
 | `config:get` | renderer → main | Load overlay config JSON |
 | `config:set` | renderer → main | Save overlay config JSON + broadcast |
-| `devMode:get/set` | renderer → main | Read/write dev mode state |
+| `previewMode:get/set` | renderer → main | Read/write preview mode state |
 | `shortcuts:get/set` | renderer → main | Read/update global shortcuts |
 | `window:getBounds` | renderer → main | Get window's current `{x, y, width, height}` (used to lock size during drag) |
 | `window:setBounds` | renderer → main | Move + resize window during custom drag — width/height are re-asserted every frame to prevent DPI-related size creep |
@@ -219,7 +219,7 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 5. `index.ts` calls `broadcastToAll('telemetry:update', telemetry)` to all overlay windows
 6. `TelemetryContext.tsx` in the renderer listens and stores in React state
 
-Dev mode bypasses iRacing entirely — `mockTelemetry.ts` generates simulated data.
+Preview mode bypasses iRacing entirely — `mockTelemetry.ts` generates simulated data.
 
 ### Overlay Config System
 
@@ -364,7 +364,7 @@ Code exists in `src/renderer/src/overlays/Radar/`. Disabled because `CarIdxF2Tim
 Six sections:
 1. **General** — launch-on-startup toggle (calls `app.setLoginItemSettings`; reads back on mount via `app.getLoginItemSettings`)
 2. **Updates** — current version badge + update lifecycle (check → download → restart & install); powered by `electron-updater`
-3. **Developer Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
+3. **Preview Mode** — enable/disable, pick simulated session type (practice/qualifying/race)
 4. **Keyboard Shortcuts** — live-record new shortcuts (modifier-key combos only), with conflict detection
 5. **Overlay Visibility** — table of all overlays and elements with per-session-type checkboxes
 6. **Overlay Positions** — instructions for layout mode + "Reset to defaults" button

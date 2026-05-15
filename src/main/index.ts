@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from '
 import { is } from '@electron-toolkit/utils'
 import { startTelemetryPolling, stopTelemetryPolling } from './telemetry.js'
 import { registerConfigHandlers } from './config.js'
-import { getDevMode, setDevMode } from './devMode.js'
+import { getPreviewMode, setPreviewMode } from './previewMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
 import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
 import type { IRacingTelemetry } from './telemetry.js'
@@ -131,17 +131,17 @@ function openSettings() {
 }
 
 function buildTrayMenu() {
-  const dev = getDevMode()
+  const preview = getPreviewMode()
   return Menu.buildFromTemplate([
     { label: 'Settings', click: openSettings },
     { type: 'separator' },
     {
-      label: 'Dev Mode',
+      label: 'Preview Mode',
       type: 'checkbox',
-      checked: dev.enabled,
+      checked: preview.enabled,
       click: (item) => {
-        setDevMode({ enabled: item.checked })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ enabled: item.checked })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         // Rebuild menu so session type items update
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
@@ -149,33 +149,33 @@ function buildTrayMenu() {
     {
       label: 'Session: Practice',
       type: 'radio',
-      checked: dev.sessionType === 'practice',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'practice',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'practice' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'practice' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     {
       label: 'Session: Qualifying',
       type: 'radio',
-      checked: dev.sessionType === 'qualifying',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'qualifying',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'qualifying' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'qualifying' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     {
       label: 'Session: Race',
       type: 'radio',
-      checked: dev.sessionType === 'race',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'race',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'race' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'race' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
@@ -307,13 +307,13 @@ function registerWindowIpc() {
   ipcMain.handle('positions:reset', () => resetWindowPositions())
 }
 
-function registerDevModeIpc() {
-  ipcMain.handle('devMode:get', () => getDevMode())
+function registerPreviewModeIpc() {
+  ipcMain.handle('previewMode:get', () => getPreviewMode())
 
-  ipcMain.handle('devMode:set', (_event, patch: { enabled?: boolean; sessionType?: string }) => {
-    setDevMode(patch as any)
-    const state = getDevMode()
-    broadcastToAll('devMode:changed', state)
+  ipcMain.handle('previewMode:set', (_event, patch: { enabled?: boolean; sessionType?: string }) => {
+    setPreviewMode(patch as any)
+    const state = getPreviewMode()
+    broadcastToAll('previewMode:changed', state)
     if (tray) tray.setContextMenu(buildTrayMenu())
   })
 }
@@ -339,7 +339,7 @@ function registerUpdaterIpc() {
 app.whenReady().then(async () => {
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
-  registerDevModeIpc()
+  registerPreviewModeIpc()
   registerStartupIpc()
   registerUpdaterIpc()
   initUpdater(broadcastToAll)

@@ -1,4 +1,4 @@
-import { getDevMode } from './devMode.js'
+import { getPreviewMode } from './previewMode.js'
 
 export type SessionType = 'practice' | 'qualifying' | 'race' | 'unknown'
 export type TireCorner = readonly [number, number, number]
@@ -80,7 +80,7 @@ export type TelemetryCallback = (telemetry: IRacingTelemetry) => void
 let pollingInterval: ReturnType<typeof setInterval> | null = null
 
 export async function startTelemetryPolling(callback: TelemetryCallback): Promise<void> {
-  // Always load mock — needed when dev mode is on even if SDK is available
+  // Always load mock — needed when preview mode is on even if SDK is available
   const { createMockPoller } = await import('./mockTelemetry.js')
   const mocker = createMockPoller()
 
@@ -92,9 +92,9 @@ export async function startTelemetryPolling(callback: TelemetryCallback): Promis
   }
 
   pollingInterval = setInterval(() => {
-    const dev = getDevMode()
-    if (dev.enabled || !sdkReady) {
-      mocker.setSessionType(dev.sessionType)
+    const preview = getPreviewMode()
+    if (preview.enabled || !sdkReady) {
+      mocker.setSessionType(preview.sessionType)
       callback(mocker.next())
     } else {
       callback(poll())
