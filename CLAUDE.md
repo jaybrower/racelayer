@@ -123,6 +123,13 @@ npm run dist
 # Build without packaging (for testing the built output)
 npm run dist:dir
 
+# Build a pre-release package (version override only — package.json unchanged)
+# Produces e.g. RaceLayer-0.1.3-beta.1.exe in dist/
+# Upload to a GitHub --prerelease release; do NOT upload latest.yml or stable
+# users will be offered this build via auto-update.
+npm run dist:pre -- beta.1
+npm run dist:pre -- rc.2
+
 # Regenerate app icons from scratch
 npm run icons
 ```
