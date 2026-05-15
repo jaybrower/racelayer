@@ -1,0 +1,84 @@
+# Label Merged Issues
+# ───────────────────
+# When a PR is merged into a `release/v*` branch, find every issue referenced
+# by a closing keyword in the PR body (`Closes #N` / `Fixes #N` / `Resolves #N`)
+# and label it `ready-to-release`. Issues stay open — they only close when the
+# release/v* → main PR ships and the user runs the release-cleanup one-liner
+# (see CLAUDE.md → Branch policy).
+#
+# Why this exists: GitHub's native auto-close only fires on merge to the default
+# branch. We want feature-PR merges into the release branch to be visibly
+# distinguishable from "not yet started" work on the milestone view, without
+# closing issues prematurely (closed = shipped to users).
+#
+# See CLAUDE.md (branch policy) and issue #22 for the convention this enforces.
+
+name: Label Merged Issues
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - 'release/v*'
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  label:
+    name: Label linked issues as ready-to-release
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label issues referenced by closing keywords
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Extract issue numbers referenced by closing keywords.
+          # Recognised keywords (matching GitHub's own list, case-insensitive):
+          #   close, closes, closed, fix, fixes, fixed, resolve, resolves, resolved
+          # Followed by #N (no support for `owner/repo#N` cross-repo refs — same repo only).
+          issues=$(printf '%s\n' "$PR_BODY" \
+            | grep -iEo '(close[sd]?|fix(es|ed)?|resolve[sd]?)[[:space:]]+#[0-9]+' \
+            | grep -oE '#[0-9]+' \
+            | tr -d '#' \
+            | sort -u || true)
+
+          if [ -z "$issues" ]; then
+            echo "::notice::PR #${PR_NUMBER} has no closing-keyword references in its body. Nothing to label."
+            exit 0
+          fi
+
+          # Process each referenced issue.
+          for issue in $issues; do
+            # Skip already-closed issues — labelling them adds noise.
+            state=$(gh issue view "$issue" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "MISSING")
+
+            if [ "$state" = "MISSING" ]; then
+              echo "::warning::Issue #${issue} not found in $REPO — skipping."
+              continue
+            fi
+
+            if [ "$state" = "CLOSED" ]; then
+              echo "::notice::Issue #${issue} is already closed — skipping (no relabel needed)."
+              continue
+            fi
+
+            # Idempotent: gh issue edit --add-label is a no-op if the label is already present.
+            echo "Labelling issue #${issue} as ready-to-release (referenced by PR #${PR_NUMBER})..."
+            gh issue edit "$issue" --repo "$REPO" --add-label "ready-to-release"
+
+            # Trace comment — keeps a paper trail on each issue showing which PR landed it.
+            gh issue comment "$issue" --repo "$REPO" \
+              --body "Code for this issue merged in ${PR_URL} and is now waiting to ship. Will close when the release goes out."
+          done
+
+          echo "::notice::Labelled $(echo "$issues" | wc -l | tr -d ' ') issue(s) as ready-to-release."
