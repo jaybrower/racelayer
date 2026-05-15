@@ -114,7 +114,7 @@ iracing-overlay/
 │       │   ├── TelemetryContext.tsx      # Subscribes to telemetry:update IPC events
 │       │   └── OverlayConfigContext.tsx  # Loads/saves overlay config via IPC
 │       ├── hooks/
-│       │   ├── useDrag.ts     # Custom drag via window:getPosition / window:setPosition IPC
+│       │   ├── useDrag.ts     # Custom drag via window:getBounds / window:setBounds IPC
 │       │   └── useEditMode.ts # Listens for overlay:editMode broadcast
 │       ├── overlays/
 │       │   ├── Gauges/        # RPM bar, input trace, gear, speed, delta, fuel
@@ -198,8 +198,8 @@ Overlays are **hidden by default** and only shown (`showInactive()`) when iRacin
 | `config:set` | renderer → main | Save overlay config JSON + broadcast |
 | `devMode:get/set` | renderer → main | Read/write dev mode state |
 | `shortcuts:get/set` | renderer → main | Read/update global shortcuts |
-| `window:getPosition` | renderer → main | Get window's current screen position |
-| `window:setPosition` | renderer → main | Move window during custom drag |
+| `window:getBounds` | renderer → main | Get window's current `{x, y, width, height}` (used to lock size during drag) |
+| `window:setBounds` | renderer → main | Move + resize window during custom drag — width/height are re-asserted every frame to prevent DPI-related size creep |
 | `positions:reset` | renderer → main | Reset all overlay positions to defaults |
 | `startup:get` | renderer → main | Returns `boolean` — whether app is registered as a login item |
 | `startup:set` | renderer → main | Accepts `boolean` — registers or removes the Windows login item |

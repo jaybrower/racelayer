@@ -30,8 +30,8 @@ interface Window {
     getShortcuts: () => Promise<ShortcutMap>
     setShortcut: (key: string, accel: string) => Promise<{ ok: boolean; error?: string }>
     resetPositions: () => Promise<void>
-    getWindowPosition: () => Promise<{ x: number; y: number }>
-    setWindowPosition: (x: number, y: number) => void
+    getWindowBounds: () => Promise<{ x: number; y: number; width: number; height: number }>
+    setWindowBounds: (x: number, y: number, width: number, height: number) => void
     removeAllListeners: (channel: string) => void
     getStartupEnabled: () => Promise<boolean>
     setStartupEnabled: (enable: boolean) => Promise<void>

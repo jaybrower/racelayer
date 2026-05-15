@@ -44,12 +44,14 @@ const iracingOverlay = {
   resetPositions: (): Promise<void> => {
     return ipcRenderer.invoke('positions:reset')
   },
-  // Window positioning for custom drag (bypasses OS window-snap constraints)
-  getWindowPosition: (): Promise<{ x: number; y: number }> => {
-    return ipcRenderer.invoke('window:getPosition')
+  // Window bounds for custom drag (bypasses OS window-snap constraints).
+  // Width/height are included so the renderer can lock the size for the
+  // duration of a drag — see `useDrag.ts` for the Windows-DPI rationale.
+  getWindowBounds: (): Promise<{ x: number; y: number; width: number; height: number }> => {
+    return ipcRenderer.invoke('window:getBounds')
   },
-  setWindowPosition: (x: number, y: number): void => {
-    ipcRenderer.send('window:setPosition', x, y)
+  setWindowBounds: (x: number, y: number, width: number, height: number): void => {
+    ipcRenderer.send('window:setBounds', x, y, width, height)
   },
   removeAllListeners: (channel: string) => {
     ipcRenderer.removeAllListeners(channel)

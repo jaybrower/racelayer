@@ -273,19 +273,35 @@ function resetWindowPositions() {
 }
 
 function registerWindowIpc() {
-  // Renderer asks for its own window position so it can compute drag deltas
-  ipcMain.handle('window:getPosition', (event) => {
+  // Renderer asks for its own window bounds so it can compute drag deltas and
+  // lock width/height for the duration of the drag.
+  ipcMain.handle('window:getBounds', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) return { x: 0, y: 0 }
+    if (!win) return { x: 0, y: 0, width: 0, height: 0 }
     const [x, y] = win.getPosition()
-    return { x, y }
+    const [width, height] = win.getSize()
+    return { x, y, width, height }
   })
 
-  // Renderer sends the desired new position during a drag
-  ipcMain.on('window:setPosition', (event, x: number, y: number) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win) win.setPosition(Math.round(x), Math.round(y))
-  })
+  // Renderer sends the desired new bounds during a drag. We always set the
+  // full bounds (including width/height) rather than just position because
+  // `setPosition`-only updates on Windows with DPI scaling let the OS reapply
+  // size constraints between frames, causing the window to creep larger over
+  // the course of a long drag. Re-asserting width/height every frame pins it.
+  ipcMain.on(
+    'window:setBounds',
+    (event, x: number, y: number, width: number, height: number) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (win) {
+        win.setBounds({
+          x: Math.round(x),
+          y: Math.round(y),
+          width: Math.round(width),
+          height: Math.round(height),
+        })
+      }
+    },
+  )
 
   // Reset all overlay positions to defaults and delete the saved layout
   ipcMain.handle('positions:reset', () => resetWindowPositions())
