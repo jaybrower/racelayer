@@ -155,6 +155,10 @@ export default function Gauges() {
   // Return null when the overlay is disabled for this session (but keep it in edit mode)
   if (!config.gauges.enabled[sType] && !editMode) return null
 
+  // Hide entirely when the driver is in an iRacing menu (garage / get-in-car /
+  // replay / spectator). Edit mode bypasses this so overlays can be positioned.
+  if (t.connected && !t.isOnTrack && !editMode) return null
+
   const hide = config.global.hideUnsupportedElements
   const show = {
     rpmBar:     el.rpmBar[sType]     ?? true,

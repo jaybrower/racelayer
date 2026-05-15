@@ -177,6 +177,9 @@ export function createMockPoller() {
 
     return {
       connected: true,
+      // Dev mode always simulates the driver being in their cockpit so overlays
+      // render. Real-SDK IsOnTrack reflects the iRacing menu/cockpit state.
+      isOnTrack: true,
       sessionType: state.sessionType,
       sessionTime: state.tick * dt,
       sessionTimeRemain: 1800 - state.tick * dt,

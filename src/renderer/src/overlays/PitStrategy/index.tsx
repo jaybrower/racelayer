@@ -200,6 +200,10 @@ export default function PitStrategy() {
 
   if (!config.pitStrategy.enabled[sType] && !editMode) return null
 
+  // Hide entirely when the driver is in an iRacing menu (garage / get-in-car /
+  // replay / spectator). Edit mode bypasses this so overlays can be positioned.
+  if (t.connected && !t.isOnTrack && !editMode) return null
+
   if (!t.connected) {
     return (
       <div {...containerProps}>

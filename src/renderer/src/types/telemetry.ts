@@ -39,6 +39,10 @@ export interface CarTelemetry {
 
 export interface IRacingTelemetry {
   connected: boolean
+  /** True only while the driver is in their cockpit and the session is live.
+   *  False in the garage, get-in-car screen, replays, or spectator mode.
+   *  Overlays use this to hide themselves when the user is in iRacing menus. */
+  isOnTrack: boolean
   sessionType: SessionType
   sessionTime: number
   sessionTimeRemain: number
@@ -80,6 +84,7 @@ export interface IRacingTelemetry {
 
 export const EMPTY_TELEMETRY: IRacingTelemetry = {
   connected: false,
+  isOnTrack: false,
   sessionType: 'unknown',
   sessionTime: 0,
   sessionTimeRemain: 0,

@@ -269,6 +269,8 @@ function computeRelativeGap(car, playerLapDistPct, playerLap, referenceLapTime) 
 
 ## Overlay Details
 
+**Cockpit-only rendering:** Every overlay hides itself when `t.connected && !t.isOnTrack` (driver is in the garage, get-in-car screen, replay, or spectator mode) — the BrowserWindow stays open but the React component returns null. The check is bypassed in edit mode so overlays can be positioned even when the user isn't actually driving. `t.isOnTrack` maps directly to the SDK's `IsOnTrack` irsdk_bool. The disconnect-state "Waiting for iRacing…" message still shows when `!t.connected` so the user knows the overlay is alive and the app is just waiting for the sim to start.
+
 ### Gauges (`/gauges`, 860×180)
 RPM bar, throttle/brake input trace, gear indicator, speed, lap delta to best, fuel level, TC and ABS indicators. Each element independently configurable per session type.
 
