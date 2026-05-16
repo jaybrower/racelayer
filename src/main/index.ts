@@ -6,7 +6,7 @@ import { startTelemetryPolling, stopTelemetryPolling } from './telemetry.js'
 import { registerConfigHandlers } from './config.js'
 import { getPreviewMode, setPreviewMode } from './previewMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
-import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
+import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall, getLogPath as getUpdaterLogPath } from './updater.js'
 import {
   initPerfMetrics,
   recordRenderSamples,
@@ -459,6 +459,7 @@ function registerUpdaterIpc() {
   ipcMain.handle('update:check',     () => checkForUpdates())
   ipcMain.handle('update:download',  () => downloadUpdate())
   ipcMain.handle('update:install',   () => quitAndInstall())
+  ipcMain.handle('update:getLogPath',() => getUpdaterLogPath())
   ipcMain.handle('app:version',      () => app.getVersion())
 }
 

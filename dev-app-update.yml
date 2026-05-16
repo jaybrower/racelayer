@@ -1,0 +1,15 @@
+# dev-app-update.yml
+# ──────────────────
+# electron-updater reads this file in unpackaged (dev) runs to know where to
+# fetch the update feed from.  Without it, `autoUpdater.checkForUpdates()`
+# silently resolves with `null` and fires no events — the original cause of
+# the stuck-UI symptom investigated in #46.
+#
+# We still short-circuit to the `dev` UI state in `src/main/updater.ts` rather
+# than actually exercising the updater in dev mode (running the install flow
+# from a dev build is a recipe for confusing state), but having this file
+# committed means a future debugging session can toggle the short-circuit off
+# and exercise the real feed without any setup.
+provider: github
+owner: jaybrower
+repo: racelayer
