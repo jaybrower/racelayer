@@ -110,7 +110,29 @@ export function createMockPoller() {
     if (state.playerRpm < 3800) state.playerRpmDir = 1
     state.playerThrottle = Math.max(0, Math.min(1, state.playerThrottle + (Math.random() * 0.1 - 0.05)))
     state.playerBrake = state.playerThrottle < 0.3 ? Math.random() * 0.6 : 0
-    state.playerFuelLevel = Math.max(0, state.playerFuelLevel - 0.0006)
+    // Fuel depletion + auto-refuel.
+    //
+    // Two reasons we touch fuel here (see #12 follow-up — original mock had
+    // a single hardcoded 0.0006 L/tick depletion that was inconsistent with
+    // the reported `fuelUsePerHour: 75.6`, making the Pit Strategy overlay's
+    // `lapsOnFuel` estimate slowly drift upward and skip the warn/danger
+    // urgency tiers entirely):
+    //
+    //   1. Depletion now matches `fuelUsePerHour`.  75.6 L/hr × (1/3600) s/hr
+    //      × 0.1 s/tick = 0.0021 L/tick — so a Preview-Mode tester sees the
+    //      same per-lap consumption the overlay claims.
+    //
+    //   2. Auto-refuel when fuel hits zero.  Lets one Preview session
+    //      demonstrate both halves of the pit-window UI: the urgency ramp
+    //      during the first stint (safe → warn → danger as fuel runs low)
+    //      AND the "Finish on fuel" green state after the refuel, when the
+    //      fresh tank outlasts the remaining race laps.  Refuel target is
+    //      slightly above the per-stint consumption (32 L vs the 28-29 L a
+    //      lap-by-lap budget would use) so the post-refuel state reliably
+    //      satisfies `lapsOnFuel >= sessionLapsRemain` in the second half
+    //      of the mocked 30-lap race.
+    if (state.playerFuelLevel < 1) state.playerFuelLevel = 32
+    state.playerFuelLevel = Math.max(0, state.playerFuelLevel - 0.0021)
 
     // Slowly drift tire temps toward equilibrium with small noise
     const driftTire = (arr: TireArr, eq: TireArr): TireArr =>
