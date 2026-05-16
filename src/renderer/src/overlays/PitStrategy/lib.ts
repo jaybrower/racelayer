@@ -193,6 +193,26 @@ export function urgencyFor(lapsUntilPit: number | null, finishOnFuel: boolean): 
   return 'safe'
 }
 
+/** Human-readable countdown label for the Pit Window.  Returns the headline
+ *  string that the UI renders large + coloured (e.g. "Pit in 5 laps"); the
+ *  absolute `pitLap` is shown in a secondary "by Lap 14" affordance.
+ *
+ *  Special-cases the two values where a plain "in N laps" reading would be
+ *  ambiguous mid-race:
+ *    - 0 laps  → "Pit this lap"  (the player is on the pit lap RIGHT NOW;
+ *                                 come in at the end of this lap)
+ *    - 1 lap   → "Pit next lap"  (the lap after the current one is the
+ *                                 pit lap)
+ *
+ *  Returns `null` when `lapsUntilPit` is unknown (no reliable fuel estimate)
+ *  so the caller can render nothing rather than misleading text. */
+export function pitCountdownLabel(lapsUntilPit: number | null): string | null {
+  if (lapsUntilPit === null) return null
+  if (lapsUntilPit === 0) return 'Pit this lap'
+  if (lapsUntilPit === 1) return 'Pit next lap'
+  return `Pit in ${lapsUntilPit} laps`
+}
+
 /**
  * Compute fuel statistics for the Pit Strategy overlay.
  *

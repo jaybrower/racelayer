@@ -217,6 +217,9 @@
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Used by the finish-on-fuel variant — "✓ Finish on fuel".  The fuel-forced
+   variants (safe / warn / danger) no longer use this; their primary callout
+   is `.pitWindowCountdown` styled big below. */
 .pitWindowLabel {
   font-size: 11px;
   font-weight: 600;
@@ -224,21 +227,28 @@
   text-transform: uppercase;
 }
 
-.pitWindowLap {
-  font-size: 18px;
+/* Primary "Pit in N laps" / "Pit next lap" / "Pit this lap" callout.
+   This is the at-a-glance value mid-race — bigger + bolder than the
+   absolute lap reference, because it's the action the driver needs to
+   take.  Inverted from the original layout (Pit by Lap N big) after user
+   feedback: the relative-laps phrasing is less mentally taxing to parse
+   while driving than subtracting currentLap from pitLap on the fly. */
+.pitWindowCountdown {
+  font-size: 16px;
   font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  margin-right: auto; /* pushes the countdown to the right edge */
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-right: auto; /* pushes the absolute "by Lap N" to the right */
 }
 
-/* The "in N laps" countdown — small + muted relative to the headline lap.
-   Recoloured by the urgency variants below so the contrast band reads at
-   a glance. */
-.pitWindowCountdown {
+/* Secondary "by Lap N" affordance — muted, smaller.  Useful for planning
+   ("…OK so by lap 14, that gives me one more chance to pass before I pit")
+   but not the value the driver reads at speed. */
+.pitWindowLap {
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
 /* ── Urgency variants ─────────────────────────────────────────────────────

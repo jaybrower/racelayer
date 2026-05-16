@@ -8,6 +8,7 @@ import {
   computeFuelStats,
   reducePitTracker,
   urgencyFor,
+  pitCountdownLabel,
   INITIAL_PIT_TRACKER_STATE,
   LAP_TIME_ESTIMATE,
   MIN_DRIVING_FUEL_RATE,
@@ -339,6 +340,29 @@ describe('urgencyFor', () => {
     // At or above warn → safe
     expect(urgencyFor(URGENCY_WARN_THRESHOLD, false)).toBe('safe')
     expect(urgencyFor(URGENCY_WARN_THRESHOLD + 10, false)).toBe('safe')
+  })
+})
+
+describe('pitCountdownLabel', () => {
+  it('returns null when lapsUntilPit is unknown', () => {
+    expect(pitCountdownLabel(null)).toBeNull()
+  })
+
+  it('reads "Pit this lap" at 0 laps remaining', () => {
+    expect(pitCountdownLabel(0)).toBe('Pit this lap')
+  })
+
+  it('reads "Pit next lap" at 1 lap remaining', () => {
+    // The boundary "Pit in 1 lap" wording is ambiguous mid-race (is it the
+    // lap you\'re on or the one after?) — special-casing 1 to "next lap"
+    // makes the intent unambiguous.  See #12 discussion.
+    expect(pitCountdownLabel(1)).toBe('Pit next lap')
+  })
+
+  it('reads "Pit in N laps" for everything else', () => {
+    expect(pitCountdownLabel(2)).toBe('Pit in 2 laps')
+    expect(pitCountdownLabel(5)).toBe('Pit in 5 laps')
+    expect(pitCountdownLabel(13)).toBe('Pit in 13 laps')
   })
 })
 

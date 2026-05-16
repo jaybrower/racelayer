@@ -10,6 +10,7 @@ import {
   computeStintMetrics,
   computeFuelStats,
   formatLapTime,
+  pitCountdownLabel,
 } from './lib'
 import styles from './PitStrategy.module.css'
 
@@ -219,13 +220,18 @@ export default function PitStrategy() {
       )}
       {showPitWindow && stats.pitLap !== null && stats.urgency !== 'finish' && (
         <div className={`${styles.pitWindow} ${urgencyClass(stats.urgency, styles)}`}>
-          <span className={styles.pitWindowLabel}>Pit by</span>
-          <span className={styles.pitWindowLap}>Lap {stats.pitLap}</span>
-          {stats.lapsUntilPit !== null && (
-            <span className={styles.pitWindowCountdown}>
-              in {stats.lapsUntilPit} {stats.lapsUntilPit === 1 ? 'lap' : 'laps'}
-            </span>
-          )}
+          {/* Primary callout — big + coloured.  The countdown is what the
+              driver actually needs to react to; phrasing special-cases the
+              `Pit this lap` / `Pit next lap` boundary so the message is
+              unambiguous mid-race (no "is 'in 1 lap' now or end-of-lap?"
+              confusion).  Falls back to "Pit in N laps" at 2+. */}
+          <span className={styles.pitWindowCountdown}>
+            {pitCountdownLabel(stats.lapsUntilPit)}
+          </span>
+          {/* Secondary reference — the absolute lap, muted.  Useful when
+              planning ("OK so by lap 14, that gives me one more chance to
+              pass before the stop") but not the at-a-glance value. */}
+          <span className={styles.pitWindowLap}>by Lap {stats.pitLap}</span>
         </div>
       )}
     </div>
