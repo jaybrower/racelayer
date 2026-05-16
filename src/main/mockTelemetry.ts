@@ -1,7 +1,12 @@
 import type { IRacingTelemetry, DriverInfo, CarTelemetry } from './telemetry.js'
 
 const PLAYER_CAR_IDX = 5
-const LAP_TIME_BASE = 92.4 // seconds
+// Mock lap time — deliberately *much* shorter than a real road-course lap so
+// a Preview-Mode session cycles through interesting overlay states (pit-window
+// urgency ramp + finish-on-fuel transition, tire-deg trend maturity, stint
+// boundary detection) in a few minutes instead of needing a 30-minute sit-in.
+// The reported `lapLastLapTime` and per-car gap math both scale with this.
+const LAP_TIME_BASE = 20 // seconds
 const NUM_CARS = 20
 
 const MOCK_DRIVERS: DriverInfo[] = [
@@ -113,26 +118,28 @@ export function createMockPoller() {
     // Fuel depletion + auto-refuel.
     //
     // Two reasons we touch fuel here (see #12 follow-up — original mock had
-    // a single hardcoded 0.0006 L/tick depletion that was inconsistent with
-    // the reported `fuelUsePerHour: 75.6`, making the Pit Strategy overlay's
-    // `lapsOnFuel` estimate slowly drift upward and skip the warn/danger
-    // urgency tiers entirely):
+    // a hardcoded depletion that was inconsistent with the reported
+    // `fuelUsePerHour`, making the Pit Strategy overlay's `lapsOnFuel`
+    // estimate drift upward and skip the warn/danger urgency tiers entirely):
     //
-    //   1. Depletion now matches `fuelUsePerHour`.  75.6 L/hr × (1/3600) s/hr
-    //      × 0.1 s/tick = 0.0021 L/tick — so a Preview-Mode tester sees the
-    //      same per-lap consumption the overlay claims.
+    //   1. Depletion MUST match `fuelUsePerHour`.  Per-tick depletion =
+    //      `fuelUsePerHour / 3600 s/hr × 0.1 s/tick`.  With the current
+    //      360 L/hr that's 0.01 L/tick.  Both numbers MUST be updated
+    //      together when LAP_TIME_BASE or fuelUsePerHour changes — the
+    //      whole point of the new logic in `#12` is that the estimate
+    //      tracks reality.
     //
     //   2. Auto-refuel when fuel hits zero.  Lets one Preview session
     //      demonstrate both halves of the pit-window UI: the urgency ramp
     //      during the first stint (safe → warn → danger as fuel runs low)
     //      AND the "Finish on fuel" green state after the refuel, when the
     //      fresh tank outlasts the remaining race laps.  Refuel target is
-    //      slightly above the per-stint consumption (32 L vs the 28-29 L a
-    //      lap-by-lap budget would use) so the post-refuel state reliably
-    //      satisfies `lapsOnFuel >= sessionLapsRemain` in the second half
-    //      of the mocked 30-lap race.
+    //      slightly above the per-stint consumption (32 L vs ~28 L
+    //      consumed) so the post-refuel state reliably satisfies
+    //      `lapsOnFuel >= sessionLapsRemain` in the second half of the
+    //      mocked 30-lap race.
     if (state.playerFuelLevel < 1) state.playerFuelLevel = 32
-    state.playerFuelLevel = Math.max(0, state.playerFuelLevel - 0.0021)
+    state.playerFuelLevel = Math.max(0, state.playerFuelLevel - 0.01)
 
     // Slowly drift tire temps toward equilibrium with small noise
     const driftTire = (arr: TireArr, eq: TireArr): TireArr =>
@@ -234,7 +241,10 @@ export function createMockPoller() {
       throttle: state.playerThrottle,
       brake: state.playerBrake,
       fuelLevel: state.playerFuelLevel,
-      fuelUsePerHour: 75.6,
+      // Scaled with LAP_TIME_BASE so per-lap consumption stays at the same
+      // ~2 L value the overlay UI was tuned for.  See the depletion-rate
+      // comment up in the tick loop for why these two numbers MUST agree.
+      fuelUsePerHour: 360,
       lap: state.currentLap[PLAYER_CAR_IDX],
       lapCurrentLapTime: (state.tick * dt) % LAP_TIME_BASE,
       lapLastLapTime: lastLap,
