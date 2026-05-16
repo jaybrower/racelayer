@@ -158,7 +158,18 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 - [ ] **Last lap** row only renders when it's not also the stint best (no duplicate row).
 - [ ] **Trend (vs LAST N)** appears after lap 2 of the stint, muted styling through lap 3, full color from lap 4+.
 - [ ] **vs STINT BEST** renders below the trend; always ≥ 0.
-- [ ] **Pit Window → "Pit by Lap N"** shows once fuel-per-lap is known.
+- [ ] **Pit Window → "Pit by Lap N (in M laps)"** shows once fuel-per-lap is known.
+
+#### Pit Window urgency + countdown (#12)
+- [ ] **Urgency colour ramp** — drive a low-fuel run where the pit lap creeps closer. The Pit Window row should shift colour as `lapsUntilPit` crosses the thresholds:
+  - **Green ("safe")** when ≥ 6 laps until the forced pit.
+  - **Amber ("warn")** when 3–5 laps until pit.
+  - **Red ("danger")** when ≤ 2 laps until pit (or already overdue).
+- [ ] **Countdown phrasing** — "Pit by Lap 14 (in 3 laps)". Reads "1 lap" singular vs "N laps" plural correctly.
+- [ ] **Finish on fuel** — when the race ends before fuel runs out, the row flips to green "✓ Finish on fuel" with "N laps left" on the right. The fuel-forced "Pit by Lap N" row should NOT render simultaneously.
+  - Easiest to verify in Preview Mode with the mock 30-lap race: as `state.currentLap` climbs past ~28, the row flips to "Finish on fuel".
+  - In a live race, verify near the checkered flag.
+- [ ] **Timed-race graceful fallback** — in a timed (non-lap-counted) session, `sessionLapsRemain` returns a sentinel (`-1` or `32767`). The pit window should fall back to the pre-#12 behaviour: just "Pit by Lap N (in M laps)" with no finish-on-fuel branch.
 
 #### Pit-affected lap filtering
 - [ ] Make a pit stop. The in-lap and the lap after rejoining (out-lap) should NOT appear in the stint — `Stint of N` resets to 0 then climbs back from 1 on the next clean lap.

@@ -203,25 +203,101 @@
   line-height: 1;
 }
 
+/* ── Pit window section ───────────────────────────────────────────────────
+   The base layout is a flex row.  Three urgency tiers — safe / warn /
+   danger — recolour the background + accents.  A fourth "finish" variant
+   re-themes the same row as green ("Finish on fuel") + a small
+   "N laps left" footnote.  Tier mapping lives in `index.tsx` → `urgencyClass`. */
 .pitWindow {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 10px 12px;
-  background: rgba(251, 191, 36, 0.05);
-  border-top: 1px solid rgba(251, 191, 36, 0.15);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .pitWindowLabel {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #fbbf24;
+  text-transform: uppercase;
 }
 
 .pitWindowLap {
   font-size: 18px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-right: auto; /* pushes the countdown to the right edge */
+}
+
+/* The "in N laps" countdown — small + muted relative to the headline lap.
+   Recoloured by the urgency variants below so the contrast band reads at
+   a glance. */
+.pitWindowCountdown {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+/* ── Urgency variants ─────────────────────────────────────────────────────
+   Safe = green (plenty of laps until pit).
+   Warn = amber (3–5 laps — was the original always-amber palette).
+   Danger = red (≤ 2 laps — pit imminent or overdue).
+   See `URGENCY_DANGER_THRESHOLD` / `URGENCY_WARN_THRESHOLD` in `lib.ts`. */
+.pitWindowSafe {
+  background: rgba(74, 222, 128, 0.05);
+  border-top-color: rgba(74, 222, 128, 0.15);
+}
+.pitWindowSafe .pitWindowLabel,
+.pitWindowSafe .pitWindowLap,
+.pitWindowSafe .pitWindowCountdown {
+  color: #4ade80;
+}
+
+.pitWindowWarn {
+  background: rgba(251, 191, 36, 0.05);
+  border-top-color: rgba(251, 191, 36, 0.15);
+}
+.pitWindowWarn .pitWindowLabel,
+.pitWindowWarn .pitWindowLap,
+.pitWindowWarn .pitWindowCountdown {
   color: #fbbf24;
+}
+
+.pitWindowDanger {
+  background: rgba(248, 113, 113, 0.08);
+  border-top-color: rgba(248, 113, 113, 0.25);
+}
+.pitWindowDanger .pitWindowLabel,
+.pitWindowDanger .pitWindowLap,
+.pitWindowDanger .pitWindowCountdown {
+  color: #f87171;
+}
+
+/* ── Finish-on-fuel variant ───────────────────────────────────────────────
+   Visually quieter than the pit-by variants — the player isn't being asked
+   to do anything, just informed they won't need to pit for fuel.  The icon
+   is the same green check used in Updates' "Up to date" affordance. */
+.pitWindowFinish {
+  background: rgba(74, 222, 128, 0.05);
+  border-top-color: rgba(74, 222, 128, 0.15);
+}
+.pitWindowFinish .pitWindowLabel {
+  color: #4ade80;
+  font-size: 13px; /* slightly larger since there's no big "Lap N" headline */
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.pitWindowIcon {
+  color: #4ade80;
+  font-size: 14px;
+  font-weight: 700;
+}
+.pitWindowLapsLeft {
+  margin-left: auto;
+  font-size: 11px;
+  color: #94a3b8;
   font-variant-numeric: tabular-nums;
 }

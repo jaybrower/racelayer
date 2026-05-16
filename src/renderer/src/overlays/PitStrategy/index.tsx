@@ -54,10 +54,14 @@ export default function PitStrategy() {
       fuelUsePerHour: t.fuelUsePerHour,
       currentLap: t.lap,
       lapLastLapTime: t.lapLastLapTime,
+      // New for #12 — drives race-endpoint awareness ("Finish on fuel" /
+      // urgency colour ramp).  See `computeFuelStats` for the sentinel
+      // handling when this is -1 / 32767 in timed races.
+      sessionLapsRemain: t.sessionLapsRemain,
     })
     const stint = computeStintMetrics(stateRef.current.lapHistory)
     return { ...fuel, ...stint }
-  }, [t.fuelLevel, t.fuelUsePerHour, t.lap, t.lapLastLapTime])
+  }, [t.fuelLevel, t.fuelUsePerHour, t.lap, t.lapLastLapTime, t.sessionLapsRemain])
 
   const editMode = useEditMode()
   const { onMouseDown, dragging } = useDrag(editMode)
@@ -194,13 +198,50 @@ export default function PitStrategy() {
         </div>
       )}
 
-      {/* Pit window */}
-      {showPitWindow && stats.pitLap && (
-        <div className={styles.pitWindow}>
+      {/* Pit window — three render modes (issue #12):
+            1. Finish-on-fuel:  race ends before fuel runs out → green tick
+                                 + "(N laps left)" context.
+            2. Fuel-forced pit: "Pit by Lap X" + "in N laps" with urgency
+                                 colour ramp (safe → warn → danger).
+            3. Unknown:          rendered as null — the section disappears
+                                 entirely (same shape as before #12).
+          See `computeFuelStats()` for the decision logic. */}
+      {showPitWindow && stats.urgency === 'finish' && (
+        <div className={`${styles.pitWindow} ${styles.pitWindowFinish}`}>
+          <span className={styles.pitWindowIcon}>✓</span>
+          <span className={styles.pitWindowLabel}>Finish on fuel</span>
+          {stats.lapsLeftInRace !== null && (
+            <span className={styles.pitWindowLapsLeft}>
+              {stats.lapsLeftInRace} {stats.lapsLeftInRace === 1 ? 'lap' : 'laps'} left
+            </span>
+          )}
+        </div>
+      )}
+      {showPitWindow && stats.pitLap !== null && stats.urgency !== 'finish' && (
+        <div className={`${styles.pitWindow} ${urgencyClass(stats.urgency, styles)}`}>
           <span className={styles.pitWindowLabel}>Pit by</span>
           <span className={styles.pitWindowLap}>Lap {stats.pitLap}</span>
+          {stats.lapsUntilPit !== null && (
+            <span className={styles.pitWindowCountdown}>
+              in {stats.lapsUntilPit} {stats.lapsUntilPit === 1 ? 'lap' : 'laps'}
+            </span>
+          )}
         </div>
       )}
     </div>
   )
+}
+
+/** Map a `PitUrgency` tier to its CSS-module class.  Lifted out of the JSX
+ *  so the table stays readable + adding tiers later is a one-line change. */
+function urgencyClass(
+  urgency: 'safe' | 'warn' | 'danger' | 'finish' | 'unknown',
+  s: Record<string, string>,
+): string {
+  switch (urgency) {
+    case 'safe':   return s.pitWindowSafe
+    case 'warn':   return s.pitWindowWarn
+    case 'danger': return s.pitWindowDanger
+    default:       return ''
+  }
 }

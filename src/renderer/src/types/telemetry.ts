@@ -49,6 +49,10 @@ export interface IRacingTelemetry {
   sessionType: SessionType
   sessionTime: number
   sessionTimeRemain: number
+  /** Laps left in the current session.  Positive integer for lap-counted
+   *  races; a sentinel (`-1` or `32767`) for timed races.  See
+   *  `src/main/telemetry.ts` for the canonical guard semantics. */
+  sessionLapsRemain: number
 
   playerCarIdx: number
   playerCarRedLine: number  // RPM at rev limiter
@@ -99,6 +103,7 @@ export const EMPTY_TELEMETRY: IRacingTelemetry = {
   sessionType: 'unknown',
   sessionTime: 0,
   sessionTimeRemain: 0,
+  sessionLapsRemain: -1,
   playerCarIdx: 0,
   playerCarRedLine: 0,
   shiftIndicatorPct: NaN,

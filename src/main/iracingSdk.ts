@@ -393,6 +393,14 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
     sessionType,
     sessionTime:        rd(buf, D, 'SessionTime'),
     sessionTimeRemain:  rd(buf, D, 'SessionTimeRemain'),
+    // `SessionLapsRemain` is reliable in lap-counted races and a sentinel
+    // (typically `-1`) in timed races until the leader crosses the line at
+    // the end of time.  Surface it raw and let the consumer guard — see
+    // `PitStrategy/lib.ts` for the canonical [1, 9999] usable-range check.
+    // `varMap.has()` guard mirrors how we handle ShiftIndicatorPct so
+    // missing-on-this-build returns -1 (the "not available" sentinel) rather
+    // than 0 (which would look like a finished race).
+    sessionLapsRemain:  varMap.has('SessionLapsRemain') ? ri(buf, D, 'SessionLapsRemain') : -1,
     playerCarIdx:       cachedPlayerCarIdx,
     playerCarRedLine:   cachedRedLine,
     // `ShiftIndicatorPct` may not be present on every car / build of the SDK.
@@ -452,7 +460,8 @@ function extractTelemetry(buf: Buffer): IRacingTelemetry {
 
 const DISCONNECTED: IRacingTelemetry = {
   connected: false, isOnTrack: false, sessionType: 'unknown',
-  sessionTime: 0, sessionTimeRemain: 0, playerCarIdx: 0, playerCarRedLine: 0,
+  sessionTime: 0, sessionTimeRemain: 0, sessionLapsRemain: -1,
+  playerCarIdx: 0, playerCarRedLine: 0,
   shiftIndicatorPct: NaN,
   speed: 0, gear: 0, rpm: 0, throttle: 0, brake: 0,
   fuelLevel: 0, fuelUsePerHour: 0,

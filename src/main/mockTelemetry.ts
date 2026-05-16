@@ -193,6 +193,11 @@ export function createMockPoller() {
       sessionType: state.sessionType,
       sessionTime: state.tick * dt,
       sessionTimeRemain: 1800 - state.tick * dt,
+      // Simulate a 30-lap race so Preview Mode exercises the pit-strategy
+      // race-endpoint awareness from #12.  Driver starts at lap 1; once
+      // they've completed 28 laps (sessionLapsRemain ≤ ~2) the Pit Window
+      // section should flip from "Pit by Lap X" to "Finish on fuel".
+      sessionLapsRemain: Math.max(0, 30 - state.currentLap[PLAYER_CAR_IDX]),
 
       playerCarIdx: PLAYER_CAR_IDX,
       playerCarRedLine: 9400, // Porsche 992 GT3 Cup

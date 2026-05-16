@@ -7,11 +7,15 @@ import {
   computeStintMetrics,
   computeFuelStats,
   reducePitTracker,
+  urgencyFor,
   INITIAL_PIT_TRACKER_STATE,
   LAP_TIME_ESTIMATE,
   MIN_DRIVING_FUEL_RATE,
   LAP_HISTORY_WINDOW,
   FUEL_SAMPLE_WINDOW,
+  URGENCY_DANGER_THRESHOLD,
+  URGENCY_WARN_THRESHOLD,
+  MAX_USABLE_LAPS_REMAIN,
 } from '../src/renderer/src/overlays/PitStrategy/lib'
 
 // Helper: shorthand to build a lap record.
@@ -215,6 +219,126 @@ describe('computeFuelStats', () => {
       lapLastLapTime: 90,
     })
     expect(stats.pitLap).toBe(14)
+  })
+
+  // ── Race-endpoint awareness (#12) ─────────────────────────────────────────
+  // When sessionLapsRemain is a valid lap count, computeFuelStats decides
+  // whether the race ends before fuel runs out, nullifies pitLap if so, and
+  // emits the appropriate urgency tier.
+
+  it('omits sessionLapsRemain → backward-compatible (no race-endpoint info, urgency tracks pitLap)', () => {
+    const stats = computeFuelStats({ ...base, samples: [2.0] })
+    expect(stats.lapsLeftInRace).toBeNull()
+    expect(stats.finishOnFuel).toBe(false)
+    expect(stats.pitLap).toBe(24)
+    expect(stats.lapsUntilPit).toBe(14)
+    // 14 laps to go is safely above the WARN threshold → 'safe'
+    expect(stats.urgency).toBe('safe')
+  })
+
+  it('finishOnFuel: race ends before fuel runs out → pitLap/lapsUntilPit null, urgency "finish"', () => {
+    // 20 L of fuel ÷ 2 L/lap = 10 laps of fuel; race has 5 laps left.
+    const stats = computeFuelStats({
+      samples: [2.0],
+      fuelLevel: 20,
+      fuelUsePerHour: 0,
+      currentLap: 25,
+      lapLastLapTime: 90,
+      sessionLapsRemain: 5,
+    })
+    expect(stats.lapsLeftInRace).toBe(5)
+    expect(stats.finishOnFuel).toBe(true)
+    expect(stats.pitLap).toBeNull()
+    expect(stats.lapsUntilPit).toBeNull()
+    expect(stats.urgency).toBe('finish')
+  })
+
+  it('finishOnFuel boundary: exactly enough fuel for remaining race laps → finish (≤ not <)', () => {
+    // 10 L ÷ 2 L/lap = 5 laps of fuel; race has 5 laps left.
+    const stats = computeFuelStats({
+      samples: [2.0],
+      fuelLevel: 10,
+      fuelUsePerHour: 0,
+      currentLap: 25,
+      lapLastLapTime: 90,
+      sessionLapsRemain: 5,
+    })
+    expect(stats.finishOnFuel).toBe(true)
+    expect(stats.urgency).toBe('finish')
+  })
+
+  it('fuel-forced pit when race outlasts fuel', () => {
+    // 4 L ÷ 2 L/lap = 2 laps of fuel; race has 8 laps left → forced pit.
+    const stats = computeFuelStats({
+      samples: [2.0],
+      fuelLevel: 4,
+      fuelUsePerHour: 0,
+      currentLap: 22,
+      lapLastLapTime: 90,
+      sessionLapsRemain: 8,
+    })
+    expect(stats.finishOnFuel).toBe(false)
+    expect(stats.lapsLeftInRace).toBe(8)
+    expect(stats.pitLap).toBe(23) // floor(22 + 2 - 0.5)
+    expect(stats.lapsUntilPit).toBe(1)
+    expect(stats.urgency).toBe('danger')
+  })
+
+  it('rejects sentinel sessionLapsRemain (-1 for timed races) — falls back to no-info', () => {
+    const stats = computeFuelStats({ ...base, samples: [2.0], sessionLapsRemain: -1 })
+    expect(stats.lapsLeftInRace).toBeNull()
+    expect(stats.finishOnFuel).toBe(false)
+    // Same result as if sessionLapsRemain were omitted entirely.
+    expect(stats.pitLap).toBe(24)
+  })
+
+  it('rejects implausibly-large sessionLapsRemain (32767 sentinel) — falls back to no-info', () => {
+    const stats = computeFuelStats({
+      ...base,
+      samples: [2.0],
+      sessionLapsRemain: MAX_USABLE_LAPS_REMAIN + 1,
+    })
+    expect(stats.lapsLeftInRace).toBeNull()
+    expect(stats.finishOnFuel).toBe(false)
+  })
+
+  it('rejects fractional sessionLapsRemain >= 1 by flooring (defensive)', () => {
+    // SDK returns ints, but defensive guard: 5.7 should be treated as 5 laps.
+    const stats = computeFuelStats({
+      samples: [2.0],
+      fuelLevel: 20,
+      fuelUsePerHour: 0,
+      currentLap: 25,
+      lapLastLapTime: 90,
+      sessionLapsRemain: 5.7,
+    })
+    expect(stats.lapsLeftInRace).toBe(5)
+    expect(stats.finishOnFuel).toBe(true)
+  })
+})
+
+describe('urgencyFor', () => {
+  it('finishOnFuel always wins regardless of lapsUntilPit', () => {
+    expect(urgencyFor(0, true)).toBe('finish')
+    expect(urgencyFor(50, true)).toBe('finish')
+    expect(urgencyFor(null, true)).toBe('finish')
+  })
+
+  it('null lapsUntilPit + no finish → unknown', () => {
+    expect(urgencyFor(null, false)).toBe('unknown')
+  })
+
+  it('classifies by laps-until-pit threshold', () => {
+    // Below danger threshold (3) → danger
+    expect(urgencyFor(0, false)).toBe('danger')
+    expect(urgencyFor(1, false)).toBe('danger')
+    expect(urgencyFor(URGENCY_DANGER_THRESHOLD - 1, false)).toBe('danger')
+    // Between danger and warn → warn
+    expect(urgencyFor(URGENCY_DANGER_THRESHOLD, false)).toBe('warn')
+    expect(urgencyFor(URGENCY_WARN_THRESHOLD - 1, false)).toBe('warn')
+    // At or above warn → safe
+    expect(urgencyFor(URGENCY_WARN_THRESHOLD, false)).toBe('safe')
+    expect(urgencyFor(URGENCY_WARN_THRESHOLD + 10, false)).toBe('safe')
   })
 })
 
