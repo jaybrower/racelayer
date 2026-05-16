@@ -4,7 +4,9 @@ import { useEditMode } from '../../hooks/useEditMode'
 import { useDrag } from '../../hooks/useDrag'
 import { useOverlayConfig } from '../../contexts/OverlayConfigContext'
 import {
-  type LapRecord,
+  type PitTrackerState,
+  INITIAL_PIT_TRACKER_STATE,
+  reducePitTracker,
   computeStintMetrics,
   computeFuelStats,
   formatLapTime,
@@ -15,94 +17,45 @@ export default function PitStrategy() {
   const t = useTelemetry()
   const { config } = useOverlayConfig()
 
-  // ── Lap-time history ─────────────────────────────────────────────────────────
-  // Stores every completed lap; diffs are always computed at render time against
-  // the current session best so they update live as the baseline improves.
-  const lapHistoryRef = useRef<LapRecord[]>([])
-  const lastTrackedLapRef = useRef<number>(0)
+  // ── Pit tracker state machine ────────────────────────────────────────────────
+  // All the per-tick bookkeeping (lap history, fuel samples, pit-affected flag,
+  // session-transition detection) lives in `reducePitTracker` so it can be
+  // unit-tested directly.  This component just feeds it one tick per telemetry
+  // update and reads the result.
+  const stateRef = useRef<PitTrackerState>(INITIAL_PIT_TRACKER_STATE)
 
-  // Sticky flag: set true any tick the player is on pit road during the current
-  // lap, reset when a lap completes.  Initialized true because a session starts
-  // with the player in the pit stall, making lap 1 an out-lap by definition.
-  const wasInPitThisLapRef = useRef<boolean>(true)
-
-  // Detect player pit-road state every tick and OR into the sticky flag.
-  // Never clears the flag here — only the lap-transition effect resets it,
-  // so a pit visit early in the lap correctly taints the whole lap even if
-  // the player has rejoined the racing surface by the time it completes.
   useEffect(() => {
-    if (!t.connected) return
     const playerInPit = t.cars.find((c) => c.carIdx === t.playerCarIdx)?.inPit ?? false
-    if (playerInPit) wasInPitThisLapRef.current = true
-  }, [t.connected, t.cars, t.playerCarIdx])
-
-  useEffect(() => {
-    if (!t.connected || t.lapLastLapTime <= 0) return
-    if (t.lap <= 1) {
-      lapHistoryRef.current = []
-      lastTrackedLapRef.current = 0
-      // Session/lap-counter reset — start fresh with the assumption the player
-      // is currently in pit (true at lap 1 in every session type).
-      wasInPitThisLapRef.current = true
-      return
-    }
-    if (t.lap > lastTrackedLapRef.current) {
-      lastTrackedLapRef.current = t.lap
-      lapHistoryRef.current.push({
-        lap: t.lap - 1,
-        time: t.lapLastLapTime,
-        pitAffected: wasInPitThisLapRef.current,
-      })
-      // Reset for the new lap.  If the player is still on pit road right now
-      // (e.g. just crossed pit-exit line), the per-tick pit-detection effect
-      // will re-arm the flag on the next frame.
-      wasInPitThisLapRef.current = false
-      // Keep a full stint's worth; 30 laps is more than enough
-      if (lapHistoryRef.current.length > 30) lapHistoryRef.current.shift()
-    }
-  }, [t.lap, t.lapLastLapTime, t.connected])
-
-  // ── Per-lap fuel consumption (measured at lap boundaries) ────────────────────
-  const fuelAtLapStartRef = useRef<number>(-1)
-  const fuelPerLapSamplesRef = useRef<number[]>([])
-  const lastFuelLapRef = useRef<number>(0)
-
-  useEffect(() => {
-    if (!t.connected || t.fuelLevel <= 0) return
-
-    if (t.lap <= 1) {
-      fuelAtLapStartRef.current = t.fuelLevel
-      fuelPerLapSamplesRef.current = []
-      lastFuelLapRef.current = 0
-      return
-    }
-
-    if (t.lap > lastFuelLapRef.current) {
-      if (fuelAtLapStartRef.current > 0) {
-        const consumed = fuelAtLapStartRef.current - t.fuelLevel
-        // Sanity: skip if refuelled (negative) or implausibly large (>15 L)
-        if (consumed > 0.05 && consumed < 15) {
-          fuelPerLapSamplesRef.current.push(consumed)
-          if (fuelPerLapSamplesRef.current.length > 5) fuelPerLapSamplesRef.current.shift()
-        }
-      }
-      fuelAtLapStartRef.current = t.fuelLevel
-      lastFuelLapRef.current = t.lap
-    }
-  }, [t.lap, t.fuelLevel, t.connected])
+    stateRef.current = reducePitTracker(stateRef.current, {
+      connected: t.connected,
+      sessionType: t.sessionType,
+      lap: t.lap,
+      lapLastLapTime: t.lapLastLapTime,
+      fuelLevel: t.fuelLevel,
+      playerInPit,
+    })
+  }, [
+    t.connected,
+    t.sessionType,
+    t.lap,
+    t.lapLastLapTime,
+    t.fuelLevel,
+    t.cars,
+    t.playerCarIdx,
+  ])
 
   // ── Derived stats ─────────────────────────────────────────────────────────────
   // All pure logic lives in `./lib` so it can be unit-tested.  This memo just
-  // pipes the current refs through those functions on each render.
+  // pipes the current state ref through those functions on each render.
   const stats = useMemo(() => {
     const fuel = computeFuelStats({
-      samples: fuelPerLapSamplesRef.current,
+      samples: stateRef.current.fuelPerLapSamples,
       fuelLevel: t.fuelLevel,
       fuelUsePerHour: t.fuelUsePerHour,
       currentLap: t.lap,
       lapLastLapTime: t.lapLastLapTime,
     })
-    const stint = computeStintMetrics(lapHistoryRef.current)
+    const stint = computeStintMetrics(stateRef.current.lapHistory)
     return { ...fuel, ...stint }
   }, [t.fuelLevel, t.fuelUsePerHour, t.lap, t.lapLastLapTime])
 
@@ -155,7 +108,7 @@ export default function PitStrategy() {
           </div>
           <div className={styles.statRow}>
             <span className={styles.statLabel}>
-              {fuelPerLapSamplesRef.current.length > 0 ? 'Per lap (avg)' : 'Per lap (est.)'}
+              {stateRef.current.fuelPerLapSamples.length > 0 ? 'Per lap (avg)' : 'Per lap (est.)'}
             </span>
             <span className={styles.statValue}>
               {stats.hasReliableEstimate ? `${stats.fuelPerLap.toFixed(2)} L` : '--'}
