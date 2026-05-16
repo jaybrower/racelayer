@@ -42,6 +42,19 @@ export interface IRacingTelemetry {
   sessionType: SessionType
   sessionTime: number
   sessionTimeRemain: number
+  /** iRacing's `SessionLapsRemain`: laps left in the current session.
+   *
+   *  Reliable positive integer in lap-counted races (e.g. `28` with 2 laps
+   *  to go in a 30-lap race).  Timed races return a sentinel (typically
+   *  `-1` or `32767`) until the leader crosses the line at the end of
+   *  time, at which point it counts down the remaining laps after the
+   *  checkered flag.
+   *
+   *  Consumers should treat values outside `[1, 9999]` as "not a usable
+   *  lap-count" and fall back to `sessionTimeRemain` or no race-endpoint
+   *  awareness at all.  See `PitStrategy/lib.ts` → `computeFuelStats()`
+   *  for the canonical guard. */
+  sessionLapsRemain: number
 
   playerCarIdx: number
   playerCarRedLine: number  // RPM at rev limiter (from session YAML DriverCarRedLine)
