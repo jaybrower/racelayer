@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import electronLog from 'electron-log/main'
+import { request as httpsRequest } from 'https'
 
 // ── Logging ──────────────────────────────────────────────────────────────────
 // Writes the full updater lifecycle to `%APPDATA%/RaceLayer/logs/main.log` so
@@ -8,8 +9,14 @@ import electronLog from 'electron-log/main'
 // there's no terminal to read console output from).  See #46 — the original
 // shape relied entirely on UI feedback, which left us blind when autoUpdater
 // silently no-op'd.
+//
+// File level is `debug` so electron-updater's own internal logs (HTTP URLs,
+// response sizes, channel resolution, feed parsing) land in the file too.
+// Without that level bump, we only see the high-level error string but not
+// the request that actually failed — which is what blocked diagnosis on the
+// first PR-#47 test build.
 electronLog.initialize()
-electronLog.transports.file.level = 'info'
+electronLog.transports.file.level = 'debug'
 electronLog.transports.console.level = 'info'
 const log = electronLog.scope('updater')
 autoUpdater.logger = electronLog
@@ -144,6 +151,29 @@ export function getLogPath(): string {
 export function checkForUpdates() {
   log.info('checkForUpdates invoked')
 
+  // Pre-flight diagnostic snapshot.  When the updater rejects with one of its
+  // generic error strings (e.g. "No published versions on GitHub"), this is
+  // the only way to know what URL it was actually hitting + which channel it
+  // resolved to + what its allow-prerelease state was.  All cheap to compute.
+  try {
+    log.info('pre-flight state', {
+      packaged:           app.isPackaged,
+      currentVersion:     app.getVersion(),
+      autoUpdaterChannel: autoUpdater.channel,
+      allowPrerelease:    autoUpdater.allowPrerelease,
+      allowDowngrade:     autoUpdater.allowDowngrade,
+      autoDownload:       autoUpdater.autoDownload,
+      autoInstallOnAppQuit: autoUpdater.autoInstallOnAppQuit,
+    })
+    // `feedURL` getter on AppUpdater returns the resolved feed location.
+    // Cast through `unknown` because the public type doesn't include it but
+    // it's been a stable runtime property since electron-updater 5.x.
+    const feedURL = (autoUpdater as unknown as { getFeedURL?: () => string | null }).getFeedURL?.()
+    if (feedURL) log.info('pre-flight feedURL', feedURL)
+  } catch (e) {
+    log.warn('pre-flight introspection threw', e)
+  }
+
   // Short-circuit for dev runs.  electron-updater silently resolves with
   // `null` and fires no events when running unpackaged without a
   // `dev-app-update.yml`, which was the cause of the stuck-UI symptom in #46
@@ -201,7 +231,85 @@ export function checkForUpdates() {
       log.error('checkForUpdates rejected:', err)
       clearCheckTimeout()
       emit({ state: 'error', message: errorMessage(err) })
+      // Belt-and-suspenders diagnostic.  When electron-updater rejects, hit
+      // the same two URLs it would have using raw Node https — that tells us
+      // whether the failure is in OUR network path (proxy, DNS, captive
+      // portal, AV interception) or specifically in electron-updater's HTTP
+      // layer.  Results go to the same log file the user is sharing.
+      probeGitHubFeeds().catch((probeErr) => {
+        log.warn('probe failed (this is its own failure, not the updater\'s):', probeErr)
+      })
     })
+}
+
+/**
+ * Hit the same two GitHub URLs electron-updater would hit, using raw Node
+ * https.  Logs the status code, redirect Location header, and first few
+ * hundred bytes of the body.  Lets us tell from the log file whether GitHub
+ * is responding correctly to the host machine — separating "electron-updater
+ * bug" from "host can't reach GitHub" / "GitHub returning unexpected data".
+ *
+ * Defensive: catches and logs its own errors so a probe failure doesn't
+ * cascade into the main error path.  Runs only when the real updater has
+ * already rejected; never on success.
+ */
+async function probeGitHubFeeds(): Promise<void> {
+  const urls = [
+    'https://github.com/jaybrower/racelayer/releases.atom',
+    'https://github.com/jaybrower/racelayer/releases/latest',
+  ]
+  for (const url of urls) {
+    await new Promise<void>((resolve) => {
+      const req = httpsRequest(
+        url,
+        {
+          method: 'GET',
+          headers: {
+            // Mirror the headers electron-updater uses so GitHub serves the
+            // same content shape it would in the real path.
+            Accept: 'application/json, application/xml, application/atom+xml, text/xml, */*',
+            'User-Agent': 'RaceLayer-Updater-Probe',
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = []
+          let total = 0
+          res.on('data', (c: Buffer) => {
+            // Cap the captured body to avoid bloating the log on big responses.
+            if (total < 512) {
+              chunks.push(c)
+              total += c.length
+            }
+          })
+          res.on('end', () => {
+            const head = Buffer.concat(chunks).toString('utf-8').slice(0, 512)
+            log.info('probe response', {
+              url,
+              status: res.statusCode,
+              location: res.headers.location,
+              contentType: res.headers['content-type'],
+              bodyHead: head.replace(/\s+/g, ' ').trim(),
+            })
+            resolve()
+          })
+          res.on('error', (e) => {
+            log.warn('probe response error', { url, error: e?.message })
+            resolve()
+          })
+        },
+      )
+      req.on('error', (e) => {
+        log.warn('probe request error', { url, error: e?.message })
+        resolve()
+      })
+      req.setTimeout(8000, () => {
+        log.warn('probe timed out', { url })
+        req.destroy()
+        resolve()
+      })
+      req.end()
+    })
+  }
 }
 
 export function downloadUpdate() {
