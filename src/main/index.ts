@@ -7,7 +7,21 @@ import { registerConfigHandlers } from './config.js'
 import { getPreviewMode, setPreviewMode } from './previewMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
 import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
+import {
+  initPerfMetrics,
+  recordRenderSamples,
+  computeSnapshot as computePerfSnapshot,
+  isPerfEnabled,
+  type RenderSampleBatch,
+} from './perfMetrics.js'
+import { togglePerfHud, getPerfHudWindow, flushPerfHud } from './perfHud.js'
 import type { IRacingTelemetry } from './telemetry.js'
+
+/** Hardcoded global shortcut for the Perf HUD.  Deliberately undocumented in
+ *  the user-facing Settings so it doesn't clutter the UI for the 99% of users
+ *  who'll never need it.  Useful when remote-debugging perf reports from
+ *  end users — tell them this combo, no app update required.  See #32. */
+const PERF_HUD_SHORTCUT = 'CommandOrControl+Shift+Alt+P'
 
 interface OverlayDef {
   name: string
@@ -218,6 +232,7 @@ function buildTrayMenu() {
         if (settingsWindow && !settingsWindow.isDestroyed()) {
           saveSettingsBounds(settingsWindow)
         }
+        flushPerfHud()
         app.exit()
       },
     },
@@ -264,6 +279,25 @@ function broadcastToAll(channel: string, data: unknown) {
   broadcastToOverlays(channel, data)
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send(channel, data)
+  }
+}
+
+/** Channel-aware fan-out for perf-collection events.
+ *
+ *  • `perf:enabled` reaches **overlays + Perf HUD** — overlays need to know
+ *    when to start / stop batching React-Profiler samples, and the HUD
+ *    listens so it can render an "OFF" affordance while we're spinning up.
+ *  • `perf:snapshot` reaches **Perf HUD only** at 1 Hz — the per-process
+ *    payload is large-ish and overlays have no use for it.  Keeping it off
+ *    the overlay channel matters because some overlays render at telemetry
+ *    rate (~10 Hz) and we don't want to wake their event loop unnecessarily. */
+function broadcastPerf(channel: string, data: unknown) {
+  const hud = getPerfHudWindow()
+  if (channel === 'perf:enabled') {
+    broadcastToOverlays(channel, data)
+    if (hud) hud.webContents.send(channel, data)
+  } else if (channel === 'perf:snapshot') {
+    if (hud) hud.webContents.send(channel, data)
   }
 }
 
@@ -439,6 +473,24 @@ function registerShellIpc() {
   })
 }
 
+function registerPerfIpc() {
+  // Renderer (overlay) flushes a batch of React-Profiler `actualDuration`
+  // samples it accumulated since the last flush.  Cheaper than one IPC per
+  // commit at 10 Hz × 5 overlays = 50 msgs/sec.
+  ipcMain.on('perf:recordRender', (_event, batch: RenderSampleBatch) => {
+    recordRenderSamples(batch)
+  })
+
+  // Overlays / HUD ask whether collection is currently active.  Used on
+  // mount to decide whether to attach the React.Profiler wrapper.
+  ipcMain.handle('perf:getEnabled', () => isPerfEnabled())
+
+  // On-demand snapshot pull (debug / one-off inspections).  The 1 Hz push
+  // via `perf:snapshot` is the normal HUD path; this is a fallback for
+  // anything that wants synchronous data.
+  ipcMain.handle('perf:getSnapshot', () => computePerfSnapshot())
+}
+
 app.whenReady().then(async () => {
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
@@ -446,7 +498,9 @@ app.whenReady().then(async () => {
   registerStartupIpc()
   registerShellIpc()
   registerUpdaterIpc()
+  registerPerfIpc()
   initUpdater(broadcastToAll)
+  initPerfMetrics(broadcastPerf)
 
   // Use actual display bounds so positions scale to any monitor/DPI
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
@@ -495,6 +549,12 @@ app.whenReady().then(async () => {
     openSettings,
   })
 
+  // Secret Perf HUD shortcut — not exposed in Settings → Shortcuts because
+  // it's a developer / support-debug tool, not a normal user feature.
+  // Documented in `docs/performance.md` for end users who hit perf issues.
+  const perfOk = globalShortcut.register(PERF_HUD_SHORTCUT, togglePerfHud)
+  console.log(`[shortcuts] ${PERF_HUD_SHORTCUT} (perfHud): ${perfOk ? 'ok' : 'FAILED — already claimed'}`)
+
   await startTelemetryPolling((telemetry: IRacingTelemetry) => {
     setOverlaysVisible(telemetry.connected)
     if (telemetry.connected) {
@@ -506,6 +566,7 @@ app.whenReady().then(async () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopTelemetryPolling()
+  flushPerfHud()
 })
 
 app.on('window-all-closed', () => {

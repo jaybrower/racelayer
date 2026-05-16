@@ -86,6 +86,25 @@ const iracingOverlay = {
   onUpdateStatus: (callback: (status: unknown) => void) => {
     ipcRenderer.on('update:status', (_event, status) => callback(status))
   },
+  // ── Perf-HUD plumbing (issue #32) ──────────────────────────────────────────
+  // All no-ops when collection is disabled in main, so leaving them wired up
+  // in overlays has zero cost.  See `src/main/perfMetrics.ts` for the
+  // batching / aggregation strategy.
+  reportRenderSamples: (overlayId: string, durations: number[]): void => {
+    ipcRenderer.send('perf:recordRender', { overlayId, durations })
+  },
+  getPerfEnabled: (): Promise<boolean> => {
+    return ipcRenderer.invoke('perf:getEnabled')
+  },
+  getPerfSnapshot: (): Promise<unknown> => {
+    return ipcRenderer.invoke('perf:getSnapshot')
+  },
+  onPerfEnabled: (callback: (enabled: boolean) => void) => {
+    ipcRenderer.on('perf:enabled', (_event, enabled) => callback(enabled))
+  },
+  onPerfSnapshot: (callback: (snapshot: unknown) => void) => {
+    ipcRenderer.on('perf:snapshot', (_event, snapshot) => callback(snapshot))
+  },
 }
 
 if (process.contextIsolated) {
