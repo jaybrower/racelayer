@@ -14,12 +14,35 @@
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  /* Allow vertical scrolling so all sections stay reachable regardless of
+     window size — important because users with bounds saved from before
+     the Debug panel landed (issue #50) keep their old, shorter HUD
+     dimensions on disk and would otherwise have the new section clipped
+     below the bottom edge. */
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
   -webkit-app-region: no-drag;
   user-select: none;
+}
+
+/* Match the Settings window's thin themed scrollbar so the HUD doesn't
+   suddenly grow a chunky default OS scrollbar when overflowing. */
+.container::-webkit-scrollbar {
+  width: 6px;
+}
+.container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+.container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .header {
