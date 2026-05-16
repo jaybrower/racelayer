@@ -16,6 +16,7 @@ type UpdateStatus =
   | { state: 'downloading';   percent: number }
   | { state: 'ready';         version: string }
   | { state: 'error';         message: string }
+  | { state: 'dev' }
 
 /** Rolling render-time stats for one overlay. */
 interface OverlayPerfStats {
@@ -72,6 +73,7 @@ interface Window {
     checkForUpdates: () => Promise<void>
     downloadUpdate: () => Promise<void>
     installUpdate: () => Promise<void>
+    getUpdaterLogPath: () => Promise<string>
     openExternal: (url: string) => Promise<void>
     onUpdateStatus: (callback: (status: UpdateStatus) => void) => void
     // Perf HUD plumbing (issue #32) — see `src/main/perfMetrics.ts`.

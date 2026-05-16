@@ -698,6 +698,39 @@
   color: #f87171;
 }
 
+/* Detailed error message shown under the row.  Wrapped so long stack-trace-
+   style messages don't blow out the layout; muted relative to the headline
+   "Update failed" line above. */
+.updateErrorDetail {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-word;
+  font-family: 'Cascadia Mono', 'Consolas', monospace;
+}
+
+/* Support-footer chip showing the updater log file path.  Tucked under the
+   update row, deliberately quiet — most users will never look at this, but
+   when a support request comes in we need a copyable file path. */
+.updateLogPath {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(100, 116, 139, 0.18);
+  font-size: 10px;
+  color: #64748b;
+}
+
+.updateLogPath code {
+  font-family: 'Cascadia Mono', 'Consolas', monospace;
+  color: #94a3b8;
+  word-break: break-all;
+}
+
 /* ── Overlays matrix ──────────────────────────────────────────────────────────
    CSS Grid replacement for what used to be an HTML <table>.  The table form
    was painful for three reasons that all stem from `<tr>` being a
