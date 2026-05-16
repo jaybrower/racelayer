@@ -4,20 +4,15 @@ import electronLog from 'electron-log/main'
 import { request as httpsRequest } from 'https'
 
 // ── Logging ──────────────────────────────────────────────────────────────────
-// Writes the full updater lifecycle to `%APPDATA%/RaceLayer/logs/main.log` so
-// support requests are actionable even from an installed NSIS build (where
-// there's no terminal to read console output from).  See #46 — the original
-// shape relied entirely on UI feedback, which left us blind when autoUpdater
-// silently no-op'd.
+// The logging system itself lives in `src/main/logging.ts` — it owns
+// `electronLog.initialize()`, the file/console transport level, and the
+// build-tier-aware default-level policy (see #50).  This module just borrows
+// a scoped logger and wires electron-updater's internal logs through to the
+// same file so the full lifecycle lands in one place for support / debug.
 //
-// File level is `debug` so electron-updater's own internal logs (HTTP URLs,
-// response sizes, channel resolution, feed parsing) land in the file too.
-// Without that level bump, we only see the high-level error string but not
-// the request that actually failed — which is what blocked diagnosis on the
-// first PR-#47 test build.
-electronLog.initialize()
-electronLog.transports.file.level = 'debug'
-electronLog.transports.console.level = 'info'
+// Make sure `initLogging(...)` runs in `src/main/index.ts` BEFORE
+// `initUpdater(...)` — otherwise this scoped logger and electron-updater's
+// internal logs both write to an uninitialised transport.
 const log = electronLog.scope('updater')
 autoUpdater.logger = electronLog
 
@@ -161,12 +156,6 @@ function errorMessage(err: unknown): string {
 
 export function getUpdateStatus(): UpdateStatus {
   return currentStatus
-}
-
-/** Path to the log file the updater writes to.  Surfaced via IPC so the
- *  Updates pane can show it in the support footer ("Logs at: …"). */
-export function getLogPath(): string {
-  return electronLog.transports.file.getFile().path
 }
 
 export function checkForUpdates() {

@@ -16,6 +16,20 @@ export default function UpdatesPane({
     window.iracingOverlay.getUpdaterLogPath().then(setLogPath).catch(() => {})
   }, [])
 
+  // Log-level state — keep in sync so we can gate the support footer on
+  // verbosity.  On stable installs the default is `warn`, which means the
+  // log file has barely anything useful for support, so we hide the path
+  // entirely.  When a dev / support session bumps the level via the Perf
+  // HUD (or it's auto-bumped for a dist:pre build), the footer reappears.
+  // See issue #50.
+  const [logState, setLogState] = useState<LogLevelState | null>(null)
+  useEffect(() => {
+    window.iracingOverlay.getLogState().then(setLogState).catch(() => {})
+    window.iracingOverlay.onLogLevelChanged(setLogState)
+    return () => window.iracingOverlay.removeAllListeners('log:level-changed')
+  }, [])
+  const logsVerbose = logState?.level === 'info' || logState?.level === 'debug'
+
   return (
     <>
       <div className={styles.paneIntro}>
@@ -120,8 +134,10 @@ export default function UpdatesPane({
 
       {/* Support footer — surfaces the log file path so users can copy + share
           when an update fails for non-obvious reasons.  Doesn't show in the
-          'dev' state (devs already know where their own logs are). */}
-      {logPath && updateStatus.state !== 'dev' && (
+          'dev' state (devs already know where their own logs are), AND only
+          shows when the log level is verbose enough (info / debug) for the
+          file to contain something useful for support.  See issue #50. */}
+      {logPath && logsVerbose && updateStatus.state !== 'dev' && (
         <div className={styles.updateLogPath}>
           Updater logs: <code>{logPath}</code>
         </div>

@@ -80,6 +80,25 @@ const iracingOverlay = {
   getUpdaterLogPath: (): Promise<string> => {
     return ipcRenderer.invoke('update:getLogPath')
   },
+  // ── Log-level controls (issue #50) ────────────────────────────────────────
+  // Surfaced in the Perf HUD; the regular Settings UI doesn't expose these
+  // because they're a dev / support-debug tool, not a normal user feature.
+  // See `src/main/logging.ts` for the build-tier default policy.
+  getLogState: (): Promise<unknown> => {
+    return ipcRenderer.invoke('log:getState')
+  },
+  setLogLevel: (level: string): Promise<unknown> => {
+    return ipcRenderer.invoke('log:setLevel', level)
+  },
+  resetLogLevel: (): Promise<unknown> => {
+    return ipcRenderer.invoke('log:resetLevel')
+  },
+  revealLogFolder: (): Promise<string> => {
+    return ipcRenderer.invoke('log:reveal')
+  },
+  onLogLevelChanged: (callback: (state: unknown) => void) => {
+    ipcRenderer.on('log:level-changed', (_event, state) => callback(state))
+  },
   // Open an http(s) URL in the user's default browser.  Main-process side
   // validates the scheme so a compromised renderer can't launch arbitrary
   // protocols.

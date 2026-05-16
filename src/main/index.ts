@@ -6,7 +6,16 @@ import { startTelemetryPolling, stopTelemetryPolling } from './telemetry.js'
 import { registerConfigHandlers } from './config.js'
 import { getPreviewMode, setPreviewMode } from './previewMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
-import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall, getLogPath as getUpdaterLogPath } from './updater.js'
+import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
+import {
+  initLogging,
+  getLogLevelState,
+  setLogLevel as applyLogLevel,
+  resetLogLevel as resetLogLevelImpl,
+  getLogPath as getUpdaterLogPath,
+  openLogFolder,
+  type LogLevel,
+} from './logging.js'
 import {
   initPerfMetrics,
   recordRenderSamples,
@@ -265,21 +274,28 @@ function broadcastToOverlays(channel: string, data: unknown) {
   })
 }
 
-/** Send an IPC event to every window — overlays AND the Settings window.
- *  Use this for *state-change* channels that the Settings UI cares about:
- *  `previewMode:changed`, `config:changed`, `update:status`, etc.  Without
- *  this fan-out, the Settings pane never sees changes initiated from the
- *  tray menu (e.g. toggling Preview Mode from the Windows tray).
+/** Send an IPC event to every window — overlays AND the Settings window AND
+ *  the Perf HUD (if open).
+ *
+ *  Use this for *state-change* channels that any renderer might care about:
+ *  `previewMode:changed`, `config:changed`, `update:status`,
+ *  `log:level-changed`, etc.  Without this fan-out the receiving window
+ *  doesn't learn about the change until something forces it to re-fetch
+ *  state on its own.
  *
  *  Original `broadcastToAll` did NOT include the Settings window, so any
  *  state change driven from the tray or from the main process never
  *  propagated to Settings — visible to the user as Preview Mode getting
- *  out of sync between tray and Settings. */
+ *  out of sync between tray and Settings.  Subsequently the Perf HUD was
+ *  added; same logic applies — anything that affects the level shown in
+ *  the Debug panel (i.e. `log:level-changed`) needs to reach the HUD. */
 function broadcastToAll(channel: string, data: unknown) {
   broadcastToOverlays(channel, data)
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send(channel, data)
   }
+  const hud = getPerfHudWindow()
+  if (hud) hud.webContents.send(channel, data)
 }
 
 /** Channel-aware fan-out for perf-collection events.
@@ -459,6 +475,9 @@ function registerUpdaterIpc() {
   ipcMain.handle('update:check',     () => checkForUpdates())
   ipcMain.handle('update:download',  () => downloadUpdate())
   ipcMain.handle('update:install',   () => quitAndInstall())
+  // Kept as an alias to the same path the new `log:getState` returns.
+  // Existing renderers (Updates pane footer) can continue using
+  // `getUpdaterLogPath`; new ones should reach for the log-system state.
   ipcMain.handle('update:getLogPath',() => getUpdaterLogPath())
   ipcMain.handle('app:version',      () => app.getVersion())
 }
@@ -472,6 +491,29 @@ function registerShellIpc() {
     if (!/^https?:\/\//i.test(url)) return
     shell.openExternal(url)
   })
+}
+
+function registerLogIpc() {
+  // Initial state + on-demand re-query.  The Perf HUD pulls this on mount;
+  // renderers also subscribe to `log:level-changed` for push updates.
+  ipcMain.handle('log:getState', () => getLogLevelState())
+
+  // Apply a user override.  Persists to disk + broadcasts the new state.
+  ipcMain.handle('log:setLevel', (_event, level: unknown) => {
+    if (typeof level !== 'string') return getLogLevelState()
+    applyLogLevel(level as LogLevel)
+    return getLogLevelState()
+  })
+
+  // Clear the override; revert to the build-tier default.
+  ipcMain.handle('log:resetLevel', () => {
+    resetLogLevelImpl()
+    return getLogLevelState()
+  })
+
+  // Open the log folder in the OS file browser.  Returns the empty string
+  // on success per `shell.openPath`; non-empty string is an error message.
+  ipcMain.handle('log:reveal', () => openLogFolder())
 }
 
 function registerPerfIpc() {
@@ -493,12 +535,18 @@ function registerPerfIpc() {
 }
 
 app.whenReady().then(async () => {
+  // Logging must initialise before anything else that writes logs — see
+  // comment in `src/main/updater.ts`.  Otherwise the updater module logs to
+  // electron-log's pre-init no-op transport and we miss the first events.
+  initLogging(broadcastToAll)
+
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
   registerPreviewModeIpc()
   registerStartupIpc()
   registerShellIpc()
   registerUpdaterIpc()
+  registerLogIpc()
   registerPerfIpc()
   initUpdater(broadcastToAll)
   initPerfMetrics(broadcastPerf)
