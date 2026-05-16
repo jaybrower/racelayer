@@ -164,6 +164,13 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 - [ ] Make a pit stop. The in-lap and the lap after rejoining (out-lap) should NOT appear in the stint — `Stint of N` resets to 0 then climbs back from 1 on the next clean lap.
 - [ ] Lap 1 of any session is automatically excluded (out-lap by definition).
 
+#### Session-transition reset (regression check, #39)
+- [ ] Do a few laps in practice or qualifying — including at least one slow/cold lap (so the times wouldn't be plausible race laps).
+- [ ] Advance into a race session in the same join (don't restart the app).
+- [ ] As race laps complete, **Stint best** / **Last lap** should reflect race laps only (matching iRacing's own `Last` / `Best` values), not stale practice/qualifying times.
+- [ ] The `Stint of N` counter should start fresh from the race — not continue counting up from the practice total.
+- [ ] Fuel `Per lap (avg)` should re-bootstrap from the race's first sampled lap, not carry the qualifying number forward.
+
 ### Tire Temps
 
 - [ ] All four corners render with a color scale: blue (cold) → green → yellow → red (hot).

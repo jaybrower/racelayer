@@ -1,11 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import {
   type LapRecord,
+  type PitTrackerState,
+  type PitTrackerTick,
   formatLapTime,
   computeStintMetrics,
   computeFuelStats,
+  reducePitTracker,
+  INITIAL_PIT_TRACKER_STATE,
   LAP_TIME_ESTIMATE,
   MIN_DRIVING_FUEL_RATE,
+  LAP_HISTORY_WINDOW,
+  FUEL_SAMPLE_WINDOW,
 } from '../src/renderer/src/overlays/PitStrategy/lib'
 
 // Helper: shorthand to build a lap record.
@@ -209,5 +215,221 @@ describe('computeFuelStats', () => {
       lapLastLapTime: 90,
     })
     expect(stats.pitLap).toBe(14)
+  })
+})
+
+// ── reducePitTracker ─────────────────────────────────────────────────────────
+// State machine that drives the Pit Strategy overlay's lap-history and fuel
+// sampling.  Replaces the previous shape (two useEffects with refs in
+// index.tsx) and adds reliable session-transition handling — see #39.
+
+/** Helper: minimal tick with sensible defaults; override only what each test cares about. */
+const tick = (overrides: Partial<PitTrackerTick> = {}): PitTrackerTick => ({
+  connected: true,
+  sessionType: 'race',
+  lap: 1,
+  lapLastLapTime: 0,
+  fuelLevel: 50,
+  playerInPit: false,
+  ...overrides,
+})
+
+/** Helper: feed a sequence of ticks into the reducer and return the final state. */
+const run = (ticks: PitTrackerTick[], initial: PitTrackerState = INITIAL_PIT_TRACKER_STATE) =>
+  ticks.reduce((s, t) => reducePitTracker(s, t), initial)
+
+describe('reducePitTracker — session transitions', () => {
+  it('reproduces #39: practice/qualifying laps don\'t poison a subsequent race stint', () => {
+    // 1. Player ran 8 laps in qualifying (some slow out-laps around 1:32).
+    // 2. Race session starts; lap counter drops back toward 1.
+    // 3. Race laps come in.  The race stint should be the race laps only.
+    let state = INITIAL_PIT_TRACKER_STATE
+    // Push 8 qualifying laps.
+    for (let lap = 2; lap <= 9; lap++) {
+      state = reducePitTracker(state, tick({
+        sessionType: 'qualifying',
+        lap,
+        lapLastLapTime: 92 + (lap - 2) * 0.1,
+        fuelLevel: 60 - (lap - 2) * 0.5,
+      }))
+    }
+    expect(state.lapHistory).toHaveLength(8)
+
+    // Session transition: now in race, lap counter dropped to 1 (no completed
+    // lap yet).  Critically, lapLastLapTime is briefly 0 — this is the exact
+    // window where the old code's early-return ate the reset.
+    state = reducePitTracker(state, tick({ sessionType: 'race', lap: 1, lapLastLapTime: 0, fuelLevel: 80 }))
+    expect(state.lapHistory).toEqual([])
+    expect(state.lastTrackedLap).toBe(0)
+
+    // Now a race lap completes — push lap 1 at 67.5s, then lap 2.
+    state = reducePitTracker(state, tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67.5, fuelLevel: 78 }))
+    state = reducePitTracker(state, tick({ sessionType: 'race', lap: 3, lapLastLapTime: 67.4, fuelLevel: 76 }))
+    expect(state.lapHistory.map((l) => l.lap)).toEqual([1, 2])
+    expect(state.lapHistory[0].time).toBeCloseTo(67.5, 6)
+  })
+
+  it('clears state when sessionType moves between two known values', () => {
+    const before = run([
+      tick({ sessionType: 'practice', lap: 2, lapLastLapTime: 92, fuelLevel: 50 }),
+      tick({ sessionType: 'practice', lap: 3, lapLastLapTime: 91, fuelLevel: 48 }),
+    ])
+    expect(before.lapHistory).toHaveLength(2)
+    const after = reducePitTracker(before, tick({ sessionType: 'race', lap: 1, fuelLevel: 80 }))
+    expect(after.lapHistory).toEqual([])
+    expect(after.lastTrackedLap).toBe(0)
+    expect(after.prevSessionType).toBe('race')
+  })
+
+  it('does NOT treat the initial unknown → known transition as a session change', () => {
+    // First tick of the session: prevSessionType is 'unknown' (the default).
+    // Moving to 'practice' shouldn't trigger a reset — there's nothing to reset.
+    const state = reducePitTracker(INITIAL_PIT_TRACKER_STATE, tick({ sessionType: 'practice', lap: 1, fuelLevel: 50 }))
+    expect(state.prevSessionType).toBe('practice')
+    expect(state.fuelAtLapStart).toBe(50) // bootstrap fired
+  })
+
+  it('does NOT clear when sessionType flickers to unknown (e.g. transient disconnect)', () => {
+    const before = run([
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67, fuelLevel: 50 }),
+      tick({ sessionType: 'race', lap: 3, lapLastLapTime: 67.1, fuelLevel: 48 }),
+    ])
+    const after = reducePitTracker(before, tick({ sessionType: 'unknown', lap: 3, fuelLevel: 48 }))
+    expect(after.lapHistory).toHaveLength(2)
+  })
+
+  it('clears on a backward lap counter even when sessionType is unchanged (replay rewind)', () => {
+    const before = run([
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67, fuelLevel: 50 }),
+      tick({ sessionType: 'race', lap: 3, lapLastLapTime: 67, fuelLevel: 48 }),
+      tick({ sessionType: 'race', lap: 4, lapLastLapTime: 67, fuelLevel: 46 }),
+    ])
+    expect(before.lapHistory).toHaveLength(3)
+    // Replay rewind: same session type, lap counter goes back.
+    const after = reducePitTracker(before, tick({ sessionType: 'race', lap: 2, fuelLevel: 50 }))
+    expect(after.lapHistory).toEqual([])
+  })
+
+  it('no-ops on a disconnected tick', () => {
+    const before = run([tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67, fuelLevel: 50 })])
+    const after = reducePitTracker(before, tick({ connected: false, sessionType: 'race', lap: 99 }))
+    expect(after).toBe(before)
+  })
+})
+
+describe('reducePitTracker — lap boundaries', () => {
+  it('pushes a LapRecord with the just-completed lap number, time, and pit-flag', () => {
+    const state = run([
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80 }),
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67.5, fuelLevel: 78 }),
+    ])
+    expect(state.lapHistory).toEqual([
+      { lap: 1, time: 67.5, pitAffected: true }, // initial flag: starts in pit
+    ])
+    expect(state.lastTrackedLap).toBe(2)
+    expect(state.wasInPitThisLap).toBe(false) // reset on lap boundary
+  })
+
+  it('does not push when lap counter advances but lapLastLapTime is briefly 0', () => {
+    let state = run([
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80 }),
+      // Counter advances but lap time hasn't propagated yet — common race condition.
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 0, fuelLevel: 78 }),
+    ])
+    expect(state.lapHistory).toEqual([])
+    expect(state.lastTrackedLap).toBe(0) // unchanged — waiting for the lap time
+
+    // Next tick has the lap time — now we push.
+    state = reducePitTracker(state, tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67.5, fuelLevel: 78 }))
+    expect(state.lapHistory.map((l) => l.lap)).toEqual([1])
+    expect(state.lastTrackedLap).toBe(2)
+  })
+
+  it('caps the lap history at LAP_HISTORY_WINDOW entries', () => {
+    let state = INITIAL_PIT_TRACKER_STATE
+    for (let lap = 2; lap <= LAP_HISTORY_WINDOW + 5; lap++) {
+      state = reducePitTracker(state, tick({ sessionType: 'race', lap, lapLastLapTime: 67, fuelLevel: 80 }))
+    }
+    // Ticks at lap=2..LAP_HISTORY_WINDOW+5 push records for laps 1..LAP_HISTORY_WINDOW+4.
+    // After capping, the oldest (LAP_HISTORY_WINDOW+4 − LAP_HISTORY_WINDOW = 4) are dropped.
+    expect(state.lapHistory).toHaveLength(LAP_HISTORY_WINDOW)
+    expect(state.lapHistory[0].lap).toBe(5)
+    expect(state.lapHistory[state.lapHistory.length - 1].lap).toBe(LAP_HISTORY_WINDOW + 4)
+  })
+})
+
+describe('reducePitTracker — pit-affected flag', () => {
+  it('sticks across ticks within a single lap', () => {
+    const state = run([
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80, playerInPit: false }),
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80, playerInPit: true }),  // brief pit visit
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80, playerInPit: false }), // back on track
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67, fuelLevel: 78, playerInPit: false }),
+    ])
+    expect(state.lapHistory[0].pitAffected).toBe(true)
+  })
+
+  it('clears at the lap boundary and a fresh non-pit lap is clean', () => {
+    let state = run([
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80, playerInPit: true }),
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 95, fuelLevel: 78, playerInPit: false }), // out-lap
+    ])
+    expect(state.lapHistory[0].pitAffected).toBe(true)
+
+    // Next lap: no pit visit at all.
+    state = reducePitTracker(state, tick({ sessionType: 'race', lap: 3, lapLastLapTime: 67, fuelLevel: 76 }))
+    expect(state.lapHistory[1].pitAffected).toBe(false)
+  })
+})
+
+describe('reducePitTracker — fuel sampling', () => {
+  it('pushes a per-lap sample alongside the lap record', () => {
+    const state = run([
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80 }),                              // bootstrap fuelAtLapStart=80
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67, fuelLevel: 78 }),          // consumed=2
+      tick({ sessionType: 'race', lap: 3, lapLastLapTime: 67, fuelLevel: 76.1 }),        // consumed=1.9
+    ])
+    expect(state.fuelPerLapSamples).toHaveLength(2)
+    expect(state.fuelPerLapSamples[0]).toBeCloseTo(2, 6)
+    expect(state.fuelPerLapSamples[1]).toBeCloseTo(1.9, 6)
+  })
+
+  it('rejects implausible samples (refuel — negative consumed)', () => {
+    const state = run([
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80 }),
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67, fuelLevel: 100 }), // refuelled — consumed = -20
+    ])
+    expect(state.fuelPerLapSamples).toEqual([])
+  })
+
+  it('rejects implausible samples (>15 L on a single lap)', () => {
+    const state = run([
+      tick({ sessionType: 'race', lap: 1, fuelLevel: 80 }),
+      tick({ sessionType: 'race', lap: 2, lapLastLapTime: 67, fuelLevel: 60 }), // consumed = 20
+    ])
+    expect(state.fuelPerLapSamples).toEqual([])
+  })
+
+  it('caps the rolling sample buffer at FUEL_SAMPLE_WINDOW', () => {
+    let state: PitTrackerState = INITIAL_PIT_TRACKER_STATE
+    let fuel = 80
+    state = reducePitTracker(state, tick({ sessionType: 'race', lap: 1, fuelLevel: fuel }))
+    for (let lap = 2; lap <= FUEL_SAMPLE_WINDOW + 3; lap++) {
+      fuel -= 2
+      state = reducePitTracker(state, tick({ sessionType: 'race', lap, lapLastLapTime: 67, fuelLevel: fuel }))
+    }
+    expect(state.fuelPerLapSamples).toHaveLength(FUEL_SAMPLE_WINDOW)
+  })
+
+  it('clears samples on session transition', () => {
+    const before = run([
+      tick({ sessionType: 'practice', lap: 1, fuelLevel: 80 }),
+      tick({ sessionType: 'practice', lap: 2, lapLastLapTime: 67, fuelLevel: 78 }),
+      tick({ sessionType: 'practice', lap: 3, lapLastLapTime: 67, fuelLevel: 76 }),
+    ])
+    expect(before.fuelPerLapSamples).toHaveLength(2)
+    const after = reducePitTracker(before, tick({ sessionType: 'race', lap: 1, fuelLevel: 90 }))
+    expect(after.fuelPerLapSamples).toEqual([])
+    expect(after.fuelAtLapStart).toBe(-1) // re-bootstrap on next tick
   })
 })
