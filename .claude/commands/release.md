@@ -5,7 +5,7 @@ argument-hint: vX.Y.Z
 
 You are running the RaceLayer release pipeline. The user typed `/release $ARGUMENTS` — that argument is the version being shipped (e.g. `v0.1.6`).
 
-The full process is documented below as a 12-step checklist. Walk through it sequentially. Use the TodoWrite tool to track progress — the user wants to see each step move from pending → in_progress → completed. If a step needs a judgment call (e.g. which issues to move into the next milestone), pause and ask via AskUserQuestion. **Never skip the manual-confirmation gates** (steps 1, 7, 12) — they exist because a release is irreversible.
+The full process is documented below as a 13-step checklist. Walk through it sequentially. Use the TodoWrite tool to track progress — the user wants to see each step move from pending → in_progress → completed. If a step needs a judgment call (e.g. which issues to move into the next milestone), pause and ask via AskUserQuestion. **Never skip the manual-confirmation gates** (steps 1, 2, 8, 13) — they exist because a release is irreversible.
 
 The branch policy + tagging conventions are documented at the top of `CLAUDE.md` — read that section first if you need a refresher. The release-notes file lives at `release-notes/$ARGUMENTS.md` (e.g. `release-notes/v0.1.6.md`).
 
@@ -20,19 +20,32 @@ Before doing anything, verify:
 
 If any precondition fails, stop and report — don't try to recover.
 
-## The 12 steps
+## The 13 steps
 
-### 1. Confirm scope with the user
+### 1. Run the local test suite first
+
+**Before anything else, run `npm test`.** A release is irreversible — catching a regression here is much cheaper than after the tag is pushed. The CI on the finalize PR will run the same suite, but we want the failure surfaced now so you can either fix it in a follow-up PR (and re-run `/release` later) or, if the failure is something you can resolve quickly, the user can patch it before the release proceeds.
+
+```bash
+npm test
+```
+
+If any test fails, **halt the release** — do not continue to step 2. Report which tests failed, paste the relevant output, and ask the user whether they want to fix forward (likely: open a fix branch off `main`, merge it into `release/$ARGUMENTS`, then re-run `/release $ARGUMENTS`) or abort.
+
+If the suite passes, capture the test count for the scope summary in step 2.
+
+### 2. Confirm scope with the user
 
 Print a summary of what's about to happen:
 
 - The list of commits on `release/$ARGUMENTS` that aren't on `main` yet (`git log --oneline main..release/$ARGUMENTS`).
 - The list of issues in the `$ARGUMENTS` milestone with `ready-to-release` label that will be auto-closed.
-- The current `package.json` version (sanity check — should already match `$ARGUMENTS` since CLAUDE.md says to bump at branch-open; if it doesn't, fold the bump into step 2).
+- The current `package.json` version (sanity check — should already match `$ARGUMENTS` since CLAUDE.md says to bump at branch-open; if it doesn't, fold the bump into step 3).
+- The test-suite result from step 1 (e.g. "126/126 vitest pass") so the user can see the green-light before approving.
 
 Ask the user to confirm before proceeding. If they say no, stop.
 
-### 2. Finalize PR (release-notes + version sanity)
+### 3. Finalize PR (release-notes + version sanity)
 
 ```bash
 git checkout -b chore/finalize-$ARGUMENTS release/$ARGUMENTS
@@ -61,7 +74,7 @@ gh pr create --base release/$ARGUMENTS --repo jaybrower/racelayer \
 
 Wait for CI to pass (`gh pr checks <num> --watch`).
 
-### 3. Merge the finalize PR
+### 4. Merge the finalize PR
 
 ```bash
 gh pr merge <num> --repo jaybrower/racelayer --squash --delete-branch
@@ -69,7 +82,7 @@ gh pr merge <num> --repo jaybrower/racelayer --squash --delete-branch
 
 Verify it merged. Update local `release/$ARGUMENTS` (`git checkout release/$ARGUMENTS && git pull`).
 
-### 4. Open release → main PR
+### 5. Open release → main PR
 
 ```bash
 gh pr create --base main --head release/$ARGUMENTS --repo jaybrower/racelayer \
@@ -81,7 +94,7 @@ The body should be a digest of the changes — pull the `## Added` / `## Changed
 
 Wait for CI to pass.
 
-### 5. Merge release → main as a merge commit (not squash)
+### 6. Merge release → main as a merge commit (not squash)
 
 Past releases preserve per-feature history on `main`:
 
@@ -97,14 +110,14 @@ git checkout main && git pull
 
 Capture the merge commit SHA — you'll tag it next.
 
-### 6. Tag the release on the merge commit
+### 7. Tag the release on the merge commit
 
 ```bash
 git tag -a $ARGUMENTS -m "$ARGUMENTS" <merge-sha>
 git push origin $ARGUMENTS
 ```
 
-### 7. Manual confirmation gate — build readiness
+### 8. Manual confirmation gate — build readiness
 
 Before running the (long) `npm run dist`, verify:
 
@@ -114,7 +127,7 @@ Before running the (long) `npm run dist`, verify:
 
 Ask the user to confirm before kicking off the build (it's a 5–10 min hot loop on this machine and they may want to step away first).
 
-### 8. Build the artifacts
+### 9. Build the artifacts
 
 ```bash
 npm run dist
@@ -131,7 +144,7 @@ When it completes, list `dist/` and verify these four files exist with the right
 
 If any are missing, stop and surface the build error to the user.
 
-### 9. Create the GitHub Release with stripped notes
+### 10. Create the GitHub Release with stripped notes
 
 Strip the `## Internal` section (and everything until the next `## ` heading or EOF) from the release notes for the GitHub Release body. The in-repo `release-notes/$ARGUMENTS.md` keeps the Internal section — only the GitHub-facing copy is trimmed.
 
@@ -143,9 +156,9 @@ gh release create $ARGUMENTS --repo jaybrower/racelayer \
   --latest
 ```
 
-For prereleases (`v0.1.6-beta.1` / `v0.1.6-rc.1`), use `--prerelease` instead of `--latest` and **do not upload `latest.yml`** in step 10 (per CLAUDE.md: stable users would otherwise be offered the beta via electron-updater).
+For prereleases (`v0.1.6-beta.1` / `v0.1.6-rc.1`), use `--prerelease` instead of `--latest` and **do not upload `latest.yml`** in step 11 (per CLAUDE.md: stable users would otherwise be offered the beta via electron-updater).
 
-### 10. Upload the artifacts to the release
+### 11. Upload the artifacts to the release
 
 For a stable release, upload all four files:
 
@@ -162,7 +175,7 @@ gh release upload $ARGUMENTS \
 
 For a prerelease, omit `latest.yml`.
 
-### 11. Close `ready-to-release` issues in the milestone
+### 12. Close `ready-to-release` issues in the milestone
 
 ```bash
 gh issue list --label ready-to-release --milestone $ARGUMENTS \
@@ -172,7 +185,7 @@ gh issue list --label ready-to-release --milestone $ARGUMENTS \
 
 Verify by listing the milestone — all entries should be `[CLOSED]` now.
 
-### 12. Open the next release branch
+### 13. Open the next release branch
 
 Ask the user (via AskUserQuestion) what version to open next:
 
