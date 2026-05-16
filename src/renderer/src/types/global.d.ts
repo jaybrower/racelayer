@@ -17,6 +17,38 @@ type UpdateStatus =
   | { state: 'ready';         version: string }
   | { state: 'error';         message: string }
 
+/** Rolling render-time stats for one overlay. */
+interface OverlayPerfStats {
+  count: number   // samples in window
+  p50: number     // ms
+  p95: number     // ms
+  max: number     // ms
+  mean: number    // ms
+}
+
+/** One Electron process entry from `app.getAppMetrics()`, packaged for the HUD. */
+interface PerfProcessMetric {
+  type: string
+  name?: string
+  cpuPct: number
+  memoryMB: number
+}
+
+/** Whole-app metrics snapshot. */
+interface PerfAppMetrics {
+  totalCpuPct: number
+  totalMemoryMB: number
+  perProcess: PerfProcessMetric[]
+}
+
+/** Snapshot pushed at 1 Hz when perf collection is enabled. */
+interface PerfSnapshot {
+  enabled: boolean
+  collectedAt: number
+  overlays: Record<string, OverlayPerfStats>
+  app: PerfAppMetrics
+}
+
 interface Window {
   iracingOverlay: {
     onTelemetryUpdate: (callback: (data: unknown) => void) => void
@@ -42,5 +74,11 @@ interface Window {
     installUpdate: () => Promise<void>
     openExternal: (url: string) => Promise<void>
     onUpdateStatus: (callback: (status: UpdateStatus) => void) => void
+    // Perf HUD plumbing (issue #32) — see `src/main/perfMetrics.ts`.
+    reportRenderSamples: (overlayId: string, durations: number[]) => void
+    getPerfEnabled: () => Promise<boolean>
+    getPerfSnapshot: () => Promise<PerfSnapshot>
+    onPerfEnabled: (callback: (enabled: boolean) => void) => void
+    onPerfSnapshot: (callback: (snapshot: PerfSnapshot) => void) => void
   }
 }

@@ -184,6 +184,17 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 - [ ] **In a live iRacing pack** — when a car comes alongside, the matching edge of the Radar lights amber. (Pre-v0.1.4 this was off by one: "clear" rendered as "car on left". Verify in a real session, not mock data.)
 - [ ] **Mock data sanity** — in preview mode, the side-edge highlight alternates between left and right as the mock cycles `CarLeftRight` through 2 → 3 → 4 → 5 → 6.
 
+### Perf HUD (issue #32)
+
+- [ ] Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>P</kbd> — a transparent ~320×280 HUD appears top-right of the primary display.
+- [ ] HUD shows: total CPU% / total memory, a per-overlay table with `p50 / p95 / max / n`, and a top-processes table.
+- [ ] Press the shortcut again — HUD hides, collection stops. (Verify by reopening: the per-overlay `n` column should reset to small numbers, not continue from the previous session's value.)
+- [ ] **Zero-cost when off:** with the HUD hidden, no `perf:*` IPC traffic appears in DevTools' renderer-process activity (filter by IPC channel name).
+- [ ] **Drag and resize** — the HUD is always draggable (no Layout Mode required) and resizable. Position/size persists across HUD-toggle and full app restart, keyed per monitor configuration.
+- [ ] **Per-overlay rows** — drive live or use Preview Mode; all five overlays' `n` columns should climb at roughly the same rate (each overlay re-renders on every telemetry tick).
+- [ ] **Hot-spot detection** — toggling shows the Relative overlay's `p95` is typically the largest (it does per-tick work over `t.cars`); this is expected and the right one to start optimising if any breach the 8 ms amber threshold.
+- [ ] Quit the app entirely while HUD is visible — no orphaned window left behind; relaunching does not auto-show the HUD.
+
 ---
 
 ## Settings window
