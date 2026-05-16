@@ -31,7 +31,7 @@ Closes #<!-- ISSUE NUMBER --> <!-- or `Fixes #N` / `Resolves #N` — required fo
      it in this PR. -->
 
 - [ ] `npm test` passes locally
-- [ ] Manually verified the change in dev mode (`npm run dev`)
+- [ ] Manually verified the change in preview mode (`npm run dev`)
 - [ ] Manually verified in a live iRacing session, if the change is telemetry-related
 - [ ] Updated `docs/test-plan.md` if user-visible behaviour changed
 

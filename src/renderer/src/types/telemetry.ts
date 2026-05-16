@@ -52,6 +52,11 @@ export interface IRacingTelemetry {
 
   playerCarIdx: number
   playerCarRedLine: number  // RPM at rev limiter
+  /** iRacing's `ShiftIndicatorPct`: 0-1 ramp that hits 1.0 at the per-car
+   *  optimum shift point.  When this field is unavailable (older SDK builds,
+   *  car not configured, var map miss), it's `NaN` — overlays fall back to a
+   *  percentage-of-redline heuristic.  See `Gauges/lib.ts` → `rpmZone()`. */
+  shiftIndicatorPct: number
   speed: number         // m/s
   gear: number          // -1=R, 0=N, 1–8
   rpm: number
@@ -96,6 +101,7 @@ export const EMPTY_TELEMETRY: IRacingTelemetry = {
   sessionTimeRemain: 0,
   playerCarIdx: 0,
   playerCarRedLine: 0,
+  shiftIndicatorPct: NaN,
   speed: 0,
   gear: 0,
   rpm: 0,

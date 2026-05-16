@@ -1,4 +1,4 @@
-import { getDevMode } from './devMode.js'
+import { getPreviewMode } from './previewMode.js'
 
 export type SessionType = 'practice' | 'qualifying' | 'race' | 'unknown'
 export type TireCorner = readonly [number, number, number]
@@ -45,6 +45,11 @@ export interface IRacingTelemetry {
 
   playerCarIdx: number
   playerCarRedLine: number  // RPM at rev limiter (from session YAML DriverCarRedLine)
+  /** iRacing's `ShiftIndicatorPct`: 0-1 ramp that hits 1.0 at the per-car
+   *  optimum shift point.  When this field is unavailable (older SDK builds,
+   *  car not configured, var map miss), it's `NaN` — overlays fall back to a
+   *  percentage-of-redline heuristic.  See `Gauges/lib.ts` → `rpmZone()`. */
+  shiftIndicatorPct: number
   speed: number         // m/s
   gear: number          // -1=R, 0=N, 1–8
   rpm: number
@@ -80,7 +85,7 @@ export type TelemetryCallback = (telemetry: IRacingTelemetry) => void
 let pollingInterval: ReturnType<typeof setInterval> | null = null
 
 export async function startTelemetryPolling(callback: TelemetryCallback): Promise<void> {
-  // Always load mock — needed when dev mode is on even if SDK is available
+  // Always load mock — needed when preview mode is on even if SDK is available
   const { createMockPoller } = await import('./mockTelemetry.js')
   const mocker = createMockPoller()
 
@@ -92,9 +97,9 @@ export async function startTelemetryPolling(callback: TelemetryCallback): Promis
   }
 
   pollingInterval = setInterval(() => {
-    const dev = getDevMode()
-    if (dev.enabled || !sdkReady) {
-      mocker.setSessionType(dev.sessionType)
+    const preview = getPreviewMode()
+    if (preview.enabled || !sdkReady) {
+      mocker.setSessionType(preview.sessionType)
       callback(mocker.next())
     } else {
       callback(poll())

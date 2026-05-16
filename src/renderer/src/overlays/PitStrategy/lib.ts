@@ -1,8 +1,10 @@
 // Pit Strategy — pure logic.
 // Anything below is React-free and side-effect-free so it can be unit-tested
-// directly from `tests/`.  The component (`index.tsx`) keeps the side-effecty
-// bits (refs, effects, lap-boundary detection) and renders the output of these
-// functions.
+// directly from `tests/`.  The component (`index.tsx`) is a thin shell that
+// owns one `useRef` of `PitTrackerState`, pipes each telemetry tick through
+// `reducePitTracker()`, and renders the output of the derived-stats helpers.
+
+import type { SessionType } from '../../types/telemetry'
 
 /** Last-resort lap-time when we have no lap data at all (lap 1 of session). */
 export const LAP_TIME_ESTIMATE = 92
@@ -14,6 +16,18 @@ export const MIN_DRIVING_FUEL_RATE = 5
 
 /** Maximum prior-laps in the trend window — "vs LAST 3" is the target. */
 export const TREND_WINDOW = 3
+
+/** Max samples retained in the rolling per-lap fuel buffer. */
+export const FUEL_SAMPLE_WINDOW = 5
+
+/** Max laps retained in the rolling lap-history buffer. */
+export const LAP_HISTORY_WINDOW = 30
+
+/** Lower / upper sanity bounds on a single per-lap fuel sample, in litres.
+ *  Anything outside this range usually indicates a refuel mid-lap, a missed
+ *  lap-boundary tick, or otherwise stale telemetry — discard it. */
+export const FUEL_SAMPLE_MIN = 0.05
+export const FUEL_SAMPLE_MAX = 15
 
 /** One completed lap.  `pitAffected = true` means the player was on pit road
  *  at any point during this lap (out-lap, in-lap, or a full pit stop), so the
@@ -161,4 +175,155 @@ export function computeFuelStats({
   const pitLap = lapsOnFuel > 0 ? Math.floor(currentLap + lapsOnFuel - 0.5) : null
 
   return { fuelPerLap, lapsOnFuel, hasReliableEstimate, pitLap }
+}
+
+// ── Per-tick state machine ───────────────────────────────────────────────────
+// Everything below replaces what used to live as a tangle of `useRef` + two
+// `useEffect`s in `index.tsx`.  Pulling it out as a pure reducer lets us:
+//   1. Detect session transitions reliably — the previous shape would silently
+//      skip its reset branch when `lapLastLapTime` happened to be 0 on the
+//      session-change tick (see #39).
+//   2. Cover the lap-tracking + fuel-sampling rules with unit tests directly,
+//      rather than driving them through React effects.
+
+/** All persistent state for the Pit Strategy tracker, evolving tick by tick. */
+export interface PitTrackerState {
+  /** All completed laps seen in the current session (capped at LAP_HISTORY_WINDOW). */
+  lapHistory: LapRecord[]
+  /** Highest lap number already pushed; new laps must have a strictly larger value. */
+  lastTrackedLap: number
+  /** Sticky-OR'd flag: was the player on pit road at any point during the current lap. */
+  wasInPitThisLap: boolean
+  /** Fuel level (L) snapshotted at the start of the current lap.  `-1` = not yet bootstrapped. */
+  fuelAtLapStart: number
+  /** Rolling per-lap fuel samples (L), capped at FUEL_SAMPLE_WINDOW. */
+  fuelPerLapSamples: number[]
+  /** Last known sessionType; used to detect session transitions (e.g. qualifying → race). */
+  prevSessionType: SessionType
+}
+
+/** Fresh state.  `wasInPitThisLap` starts true because every session begins
+ *  with the player in their pit stall, so lap 1 is an out-lap by definition. */
+export const INITIAL_PIT_TRACKER_STATE: PitTrackerState = {
+  lapHistory: [],
+  lastTrackedLap: 0,
+  wasInPitThisLap: true,
+  fuelAtLapStart: -1,
+  fuelPerLapSamples: [],
+  prevSessionType: 'unknown',
+}
+
+/** A single telemetry tick fed into `reducePitTracker`. */
+export interface PitTrackerTick {
+  connected: boolean
+  sessionType: SessionType
+  lap: number
+  /** Most recent completed lap time (seconds).  0 if no lap completed yet. */
+  lapLastLapTime: number
+  /** Current fuel level (litres). */
+  fuelLevel: number
+  /** True if the player's car is currently on pit road. */
+  playerInPit: boolean
+}
+
+/**
+ * Advance the Pit Strategy tracker by one telemetry tick.
+ *
+ * Responsibilities:
+ *   - **Session-transition / replay-rewind detection.**  Triggers a clean
+ *     slate on either (a) `sessionType` moving between two known values
+ *     (e.g. `'qualifying' → 'race'`) or (b) the lap counter going backwards
+ *     (e.g. replay rewind, tow-to-pit, mid-session join).  This runs *before*
+ *     any other gating — the bug in #39 was that the previous shape
+ *     short-circuited on `lapLastLapTime <= 0` and never reached its reset.
+ *   - **Sticky pit-affected flag.**  OR's true whenever the player is on pit
+ *     road; cleared on each lap boundary.  A pit visit early in a lap
+ *     correctly taints the whole lap even if the player has rejoined the
+ *     racing surface by the time it completes.
+ *   - **Lap-boundary detection.**  When the lap counter advances and iRacing
+ *     reports a non-zero `lapLastLapTime`, push a new `LapRecord` carrying
+ *     the current pit-flag, then reset that flag.  Tolerates a tick of delay
+ *     in `lapLastLapTime` — we only advance `lastTrackedLap` once we've
+ *     actually pushed the record.
+ *   - **Fuel sampling.**  On the same lap boundary, push a per-lap fuel-
+ *     consumed sample, sanity-gated to `[FUEL_SAMPLE_MIN, FUEL_SAMPLE_MAX]`.
+ *     Refuels (negative consumed) and obviously stale samples are dropped.
+ *
+ * Pure: no side effects, no refs, no React.
+ */
+export function reducePitTracker(state: PitTrackerState, tick: PitTrackerTick): PitTrackerState {
+  if (!tick.connected) return state
+
+  // ── 1. Session-transition / replay-rewind reset ─────────────────────────────
+  // sessionType moving between two *known* values is the strongest signal.
+  // Lap counter going backwards is the fallback — covers replay rewinds and
+  // any case where sessionType lags behind the lap counter.
+  const sessionChanged =
+    tick.sessionType !== state.prevSessionType &&
+    state.prevSessionType !== 'unknown' &&
+    tick.sessionType !== 'unknown'
+  const lapWentBackwards = tick.lap < state.lastTrackedLap
+
+  if (sessionChanged || lapWentBackwards) {
+    return {
+      ...INITIAL_PIT_TRACKER_STATE,
+      prevSessionType: tick.sessionType,
+    }
+  }
+
+  let next = state
+
+  // Track the latest known sessionType so an eventual `unknown → known`
+  // transition doesn't get mistaken for a real session change.
+  if (tick.sessionType !== state.prevSessionType) {
+    next = { ...next, prevSessionType: tick.sessionType }
+  }
+
+  // ── 2. Sticky pit-affected flag ─────────────────────────────────────────────
+  if (tick.playerInPit && !next.wasInPitThisLap) {
+    next = { ...next, wasInPitThisLap: true }
+  }
+
+  // ── 3. Lap boundary ─────────────────────────────────────────────────────────
+  // Push only when the counter has truly advanced AND iRacing has reported a
+  // non-zero lap time.  Lap counters start at 1 the moment a session goes live
+  // (no lap completed yet), so we require `tick.lap > 1` to push anything.
+  const lapAdvanced = tick.lap > next.lastTrackedLap && tick.lap > 1
+  if (lapAdvanced && tick.lapLastLapTime > 0) {
+    const newRecord: LapRecord = {
+      lap: tick.lap - 1,
+      time: tick.lapLastLapTime,
+      pitAffected: next.wasInPitThisLap,
+    }
+    const lapHistory = [...next.lapHistory, newRecord]
+    if (lapHistory.length > LAP_HISTORY_WINDOW) lapHistory.shift()
+
+    // Fuel sample at the same boundary.
+    let fuelPerLapSamples = next.fuelPerLapSamples
+    if (next.fuelAtLapStart > 0 && tick.fuelLevel > 0) {
+      const consumed = next.fuelAtLapStart - tick.fuelLevel
+      if (consumed > FUEL_SAMPLE_MIN && consumed < FUEL_SAMPLE_MAX) {
+        fuelPerLapSamples = [...fuelPerLapSamples, consumed]
+        if (fuelPerLapSamples.length > FUEL_SAMPLE_WINDOW) fuelPerLapSamples.shift()
+      }
+    }
+
+    next = {
+      ...next,
+      lapHistory,
+      lastTrackedLap: tick.lap,
+      wasInPitThisLap: false,
+      // Snapshot the new lap's starting fuel level.  Fall back to whatever we
+      // had if the SDK briefly reports 0 (paused / out of car / etc.).
+      fuelAtLapStart: tick.fuelLevel > 0 ? tick.fuelLevel : next.fuelAtLapStart,
+      fuelPerLapSamples,
+    }
+  } else if (next.fuelAtLapStart < 0 && tick.fuelLevel > 0) {
+    // ── 4. Bootstrap ──────────────────────────────────────────────────────────
+    // First time we see a positive fuel level, snapshot it so the next lap
+    // boundary has a baseline to subtract from.
+    next = { ...next, fuelAtLapStart: tick.fuelLevel }
+  }
+
+  return next
 }

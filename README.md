@@ -46,7 +46,7 @@ Four-corner tire temperature display with color-coded heat mapping — cold to h
 - **Auto-hide unsupported elements** — items marked `†` are automatically hidden when the current car doesn't support them; no manual configuration needed
 - **Safety rating badges** — Safety Rating column shows a color-coded letter+icon badge (red/yellow/green/blue) based on sub-rating value for instant at-a-glance reads
 - **Draggable layout mode** — press a shortcut to unlock all overlays for repositioning; positions are saved per monitor configuration
-- **Dev mode** — preview overlays with simulated data without iRacing running
+- **Preview mode** — preview overlays with simulated data without iRacing running
 - **Configurable shortcuts** — remap the layout-mode and settings shortcuts to whatever key combo you want
 - **No performance overhead** — overlays are hidden when iRacing is not running; telemetry is read from shared memory, not injected
 
@@ -73,7 +73,7 @@ Press `Ctrl+Shift+L` to enter Layout Mode. All overlays become draggable — pos
 ### Settings
 
 - **General** — toggle launch on Windows startup
-- **Developer Mode** — show overlays with simulated data without iRacing running; choose which session type to simulate
+- **Preview Mode** — show overlays with simulated data without iRacing running; choose which session type to simulate
 - **Keyboard Shortcuts** — click Edit next to any shortcut and press your preferred key combo
 - **Overlay Visibility** — checkboxes to show or hide each overlay and individual elements per session type
 - **Overlay Positions** — reset all overlays to their default screen positions

@@ -47,9 +47,33 @@
   overflow: hidden;
 }
 
+/* The fill paints one of five discrete colours based on the player's RPM
+   zone (see Gauges/lib.ts → rpmZone()).  Stepped, not interpolated — what
+   colour the bar is right now reads instantly in peripheral vision.  The
+   "shiftNow" zone adds a CSS-keyframes flash (no JS animation tick).
+   Width transition stays linear for smooth fill growth as revs climb;
+   background-color is intentionally NOT transitioned so zone changes
+   snap (matches real shift-light hardware). */
 .rpmFill {
   height: 100%;
   transition: width 0.06s linear;
+  background-color: #0ea5e9; /* sky-500 fallback */
+}
+
+.rpmFill_low      { background-color: #0ea5e9; }   /* sky-500   — cruising */
+.rpmFill_mid      { background-color: #10b981; }   /* emerald-500 — in the powerband */
+.rpmFill_high     { background-color: #eab308; }   /* yellow-500 — approaching shift */
+.rpmFill_redline  { background-color: #ef4444; }   /* red-500    — near shift point */
+
+/* shiftNow — flash red ↔ fuchsia at ~6 Hz.  Pure CSS keyframes; no JS loop,
+   so it won't compete with the telemetry-update cadence.  See #36. */
+.rpmFill_shiftNow {
+  animation: rpmShiftFlash 160ms ease-in-out infinite;
+}
+
+@keyframes rpmShiftFlash {
+  0%, 100% { background-color: #ef4444; }  /* red-500 */
+  50%      { background-color: #d946ef; }  /* fuchsia-500 */
 }
 
 .rpmTick {

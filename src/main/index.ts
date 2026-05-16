@@ -1,13 +1,27 @@
-import { app, BrowserWindow, globalShortcut, screen, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, globalShortcut, screen, ipcMain, Tray, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { startTelemetryPolling, stopTelemetryPolling } from './telemetry.js'
 import { registerConfigHandlers } from './config.js'
-import { getDevMode, setDevMode } from './devMode.js'
+import { getPreviewMode, setPreviewMode } from './previewMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
 import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
+import {
+  initPerfMetrics,
+  recordRenderSamples,
+  computeSnapshot as computePerfSnapshot,
+  isPerfEnabled,
+  type RenderSampleBatch,
+} from './perfMetrics.js'
+import { togglePerfHud, getPerfHudWindow, flushPerfHud } from './perfHud.js'
 import type { IRacingTelemetry } from './telemetry.js'
+
+/** Hardcoded global shortcut for the Perf HUD.  Deliberately undocumented in
+ *  the user-facing Settings so it doesn't clutter the UI for the 99% of users
+ *  who'll never need it.  Useful when remote-debugging perf reports from
+ *  end users — tell them this combo, no app update required.  See #32. */
+const PERF_HUD_SHORTCUT = 'CommandOrControl+Shift+Alt+P'
 
 interface OverlayDef {
   name: string
@@ -83,11 +97,19 @@ function createOverlayWindow(def: OverlayDef): BrowserWindow {
 }
 
 function createSettingsWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 680,
-    height: 560,
-    minWidth: 560,
-    minHeight: 400,
+  // Restore size/position from the last session if we have one for the
+  // current monitor configuration.  Width/height fall back to the hard-coded
+  // defaults; x/y fall back to -1 which Electron treats as "OS-position"
+  // (centred on the primary display on Windows) so a fresh install still
+  // opens nicely centred.
+  const saved = loadSettingsBounds()
+  const width  = Math.max(SETTINGS_MIN_WIDTH,  saved?.width  ?? SETTINGS_DEFAULT_BOUNDS.width)
+  const height = Math.max(SETTINGS_MIN_HEIGHT, saved?.height ?? SETTINGS_DEFAULT_BOUNDS.height)
+  const winOpts: Electron.BrowserWindowConstructorOptions = {
+    width,
+    height,
+    minWidth:  SETTINGS_MIN_WIDTH,
+    minHeight: SETTINGS_MIN_HEIGHT,
     show: false,
     frame: true,
     title: 'RaceLayer — Settings',
@@ -100,7 +122,12 @@ function createSettingsWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
     },
-  })
+  }
+  if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+    winOpts.x = saved.x
+    winOpts.y = saved.y
+  }
+  const win = new BrowserWindow(winOpts)
 
   if (is.dev) {
     win.loadURL(rendererUrl('settings'))
@@ -110,9 +137,24 @@ function createSettingsWindow(): BrowserWindow {
     })
   }
 
-  // Hide instead of destroy so reopening is fast
+  // Persist size + position on every move / resize, debounced so a drag
+  // doesn't fire dozens of disk writes per second.  500ms balances "saved
+  // before the user moves on" against write amplification.
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+  const schedulePersist = () => {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => saveSettingsBounds(win), 500)
+  }
+  win.on('move', schedulePersist)
+  win.on('resize', schedulePersist)
+
+  // Hide instead of destroy so reopening is fast.  Flush any pending bounds
+  // save synchronously here so the final on-screen state is what we persist
+  // — without this, fast-close-after-resize could lose the last move.
   win.on('close', (e) => {
     e.preventDefault()
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
+    saveSettingsBounds(win)
     win.hide()
   })
 
@@ -131,17 +173,17 @@ function openSettings() {
 }
 
 function buildTrayMenu() {
-  const dev = getDevMode()
+  const preview = getPreviewMode()
   return Menu.buildFromTemplate([
     { label: 'Settings', click: openSettings },
     { type: 'separator' },
     {
-      label: 'Dev Mode',
+      label: 'Preview Mode',
       type: 'checkbox',
-      checked: dev.enabled,
+      checked: preview.enabled,
       click: (item) => {
-        setDevMode({ enabled: item.checked })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ enabled: item.checked })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         // Rebuild menu so session type items update
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
@@ -149,38 +191,51 @@ function buildTrayMenu() {
     {
       label: 'Session: Practice',
       type: 'radio',
-      checked: dev.sessionType === 'practice',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'practice',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'practice' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'practice' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     {
       label: 'Session: Qualifying',
       type: 'radio',
-      checked: dev.sessionType === 'qualifying',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'qualifying',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'qualifying' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'qualifying' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     {
       label: 'Session: Race',
       type: 'radio',
-      checked: dev.sessionType === 'race',
-      enabled: dev.enabled,
+      checked: preview.sessionType === 'race',
+      enabled: preview.enabled,
       click: () => {
-        setDevMode({ sessionType: 'race' })
-        broadcastToAll('devMode:changed', getDevMode())
+        setPreviewMode({ sessionType: 'race' })
+        broadcastToAll('previewMode:changed', getPreviewMode())
         if (tray) tray.setContextMenu(buildTrayMenu())
       },
     },
     { type: 'separator' },
-    { label: 'Quit', click: () => app.exit() },
+    {
+      label: 'Quit',
+      click: () => {
+        // `app.exit()` skips the close-event handlers, so flush the Settings
+        // window bounds here as a belt-and-suspenders — otherwise a resize
+        // followed immediately by tray-Quit can lose up to ~500ms of changes
+        // sitting in the debounce timer.
+        if (settingsWindow && !settingsWindow.isDestroyed()) {
+          saveSettingsBounds(settingsWindow)
+        }
+        flushPerfHud()
+        app.exit()
+      },
+    },
   ])
 }
 
@@ -198,12 +253,52 @@ function createTray() {
   tray.on('click', openSettings)
 }
 
-function broadcastToAll(channel: string, data: unknown) {
+/** Send an IPC event to every overlay window — NOT the Settings window.
+ *  Use this for high-frequency, overlay-specific channels like
+ *  `telemetry:update` (~10 Hz) and `overlay:editMode`, where the Settings
+ *  window neither subscribes nor benefits and the extra IPC traffic is waste. */
+function broadcastToOverlays(channel: string, data: unknown) {
   windows.forEach((win) => {
     if (!win.isDestroyed()) {
       win.webContents.send(channel, data)
     }
   })
+}
+
+/** Send an IPC event to every window — overlays AND the Settings window.
+ *  Use this for *state-change* channels that the Settings UI cares about:
+ *  `previewMode:changed`, `config:changed`, `update:status`, etc.  Without
+ *  this fan-out, the Settings pane never sees changes initiated from the
+ *  tray menu (e.g. toggling Preview Mode from the Windows tray).
+ *
+ *  Original `broadcastToAll` did NOT include the Settings window, so any
+ *  state change driven from the tray or from the main process never
+ *  propagated to Settings — visible to the user as Preview Mode getting
+ *  out of sync between tray and Settings. */
+function broadcastToAll(channel: string, data: unknown) {
+  broadcastToOverlays(channel, data)
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send(channel, data)
+  }
+}
+
+/** Channel-aware fan-out for perf-collection events.
+ *
+ *  • `perf:enabled` reaches **overlays + Perf HUD** — overlays need to know
+ *    when to start / stop batching React-Profiler samples, and the HUD
+ *    listens so it can render an "OFF" affordance while we're spinning up.
+ *  • `perf:snapshot` reaches **Perf HUD only** at 1 Hz — the per-process
+ *    payload is large-ish and overlays have no use for it.  Keeping it off
+ *    the overlay channel matters because some overlays render at telemetry
+ *    rate (~10 Hz) and we don't want to wake their event loop unnecessarily. */
+function broadcastPerf(channel: string, data: unknown) {
+  const hud = getPerfHudWindow()
+  if (channel === 'perf:enabled') {
+    broadcastToOverlays(channel, data)
+    if (hud) hud.webContents.send(channel, data)
+  } else if (channel === 'perf:snapshot') {
+    if (hud) hud.webContents.send(channel, data)
+  }
 }
 
 // ── Window position persistence (per monitor configuration) ──────────────────
@@ -257,6 +352,37 @@ function loadWindowPositions(): Record<string, Partial<WindowLayout>> {
   try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return {} }
 }
 
+// ── Settings window bounds persistence ────────────────────────────────────────
+//
+// Mirrors the overlay-position pattern (per-monitor-config file) but for the
+// single Settings window.  Keyed by `monitorKey()` so unplugging or rearranging
+// monitors yields defaults for that new layout instead of restoring an
+// off-screen window.
+
+const SETTINGS_DEFAULT_BOUNDS: WindowLayout = { x: -1, y: -1, width: 680, height: 560 }
+const SETTINGS_MIN_WIDTH = 560
+const SETTINGS_MIN_HEIGHT = 400
+
+function settingsBoundsPath() {
+  return join(positionsDir(), `settings_${monitorKey()}.json`)
+}
+
+function loadSettingsBounds(): Partial<WindowLayout> | null {
+  const p = settingsBoundsPath()
+  if (!existsSync(p)) return null
+  try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return null }
+}
+
+function saveSettingsBounds(win: BrowserWindow) {
+  if (win.isDestroyed()) return
+  const [x, y] = win.getPosition()
+  const [width, height] = win.getSize()
+  const layout: WindowLayout = { x, y, width, height }
+  const dir = positionsDir()
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(settingsBoundsPath(), JSON.stringify(layout, null, 2), 'utf-8')
+}
+
 function resetWindowPositions() {
   // Delete saved file for current monitor config
   const p = positionsPath()
@@ -273,31 +399,47 @@ function resetWindowPositions() {
 }
 
 function registerWindowIpc() {
-  // Renderer asks for its own window position so it can compute drag deltas
-  ipcMain.handle('window:getPosition', (event) => {
+  // Renderer asks for its own window bounds so it can compute drag deltas and
+  // lock width/height for the duration of the drag.
+  ipcMain.handle('window:getBounds', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) return { x: 0, y: 0 }
+    if (!win) return { x: 0, y: 0, width: 0, height: 0 }
     const [x, y] = win.getPosition()
-    return { x, y }
+    const [width, height] = win.getSize()
+    return { x, y, width, height }
   })
 
-  // Renderer sends the desired new position during a drag
-  ipcMain.on('window:setPosition', (event, x: number, y: number) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win) win.setPosition(Math.round(x), Math.round(y))
-  })
+  // Renderer sends the desired new bounds during a drag. We always set the
+  // full bounds (including width/height) rather than just position because
+  // `setPosition`-only updates on Windows with DPI scaling let the OS reapply
+  // size constraints between frames, causing the window to creep larger over
+  // the course of a long drag. Re-asserting width/height every frame pins it.
+  ipcMain.on(
+    'window:setBounds',
+    (event, x: number, y: number, width: number, height: number) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (win) {
+        win.setBounds({
+          x: Math.round(x),
+          y: Math.round(y),
+          width: Math.round(width),
+          height: Math.round(height),
+        })
+      }
+    },
+  )
 
   // Reset all overlay positions to defaults and delete the saved layout
   ipcMain.handle('positions:reset', () => resetWindowPositions())
 }
 
-function registerDevModeIpc() {
-  ipcMain.handle('devMode:get', () => getDevMode())
+function registerPreviewModeIpc() {
+  ipcMain.handle('previewMode:get', () => getPreviewMode())
 
-  ipcMain.handle('devMode:set', (_event, patch: { enabled?: boolean; sessionType?: string }) => {
-    setDevMode(patch as any)
-    const state = getDevMode()
-    broadcastToAll('devMode:changed', state)
+  ipcMain.handle('previewMode:set', (_event, patch: { enabled?: boolean; sessionType?: string }) => {
+    setPreviewMode(patch as any)
+    const state = getPreviewMode()
+    broadcastToAll('previewMode:changed', state)
     if (tray) tray.setContextMenu(buildTrayMenu())
   })
 }
@@ -320,13 +462,45 @@ function registerUpdaterIpc() {
   ipcMain.handle('app:version',      () => app.getVersion())
 }
 
+function registerShellIpc() {
+  // Open external URLs in the user's default browser.  Only http(s) is allowed
+  // so a compromised renderer can't be tricked into launching `file://`,
+  // `javascript:`, custom URL handlers, etc.
+  ipcMain.handle('app:openExternal', (_event, url: unknown) => {
+    if (typeof url !== 'string') return
+    if (!/^https?:\/\//i.test(url)) return
+    shell.openExternal(url)
+  })
+}
+
+function registerPerfIpc() {
+  // Renderer (overlay) flushes a batch of React-Profiler `actualDuration`
+  // samples it accumulated since the last flush.  Cheaper than one IPC per
+  // commit at 10 Hz × 5 overlays = 50 msgs/sec.
+  ipcMain.on('perf:recordRender', (_event, batch: RenderSampleBatch) => {
+    recordRenderSamples(batch)
+  })
+
+  // Overlays / HUD ask whether collection is currently active.  Used on
+  // mount to decide whether to attach the React.Profiler wrapper.
+  ipcMain.handle('perf:getEnabled', () => isPerfEnabled())
+
+  // On-demand snapshot pull (debug / one-off inspections).  The 1 Hz push
+  // via `perf:snapshot` is the normal HUD path; this is a fallback for
+  // anything that wants synchronous data.
+  ipcMain.handle('perf:getSnapshot', () => computePerfSnapshot())
+}
+
 app.whenReady().then(async () => {
   registerConfigHandlers(broadcastToAll)
   registerWindowIpc()
-  registerDevModeIpc()
+  registerPreviewModeIpc()
   registerStartupIpc()
+  registerShellIpc()
   registerUpdaterIpc()
+  registerPerfIpc()
   initUpdater(broadcastToAll)
+  initPerfMetrics(broadcastPerf)
 
   // Use actual display bounds so positions scale to any monitor/DPI
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
@@ -368,17 +542,23 @@ app.whenReady().then(async () => {
       windows.forEach((win) => {
         win.setIgnoreMouseEvents(!editMode, { forward: true })
       })
-      broadcastToAll('overlay:editMode', editMode)
+      broadcastToOverlays('overlay:editMode', editMode)
       // Persist positions when the user locks layout
       if (!editMode) saveWindowPositions()
     },
     openSettings,
   })
 
+  // Secret Perf HUD shortcut — not exposed in Settings → Shortcuts because
+  // it's a developer / support-debug tool, not a normal user feature.
+  // Documented in `docs/performance.md` for end users who hit perf issues.
+  const perfOk = globalShortcut.register(PERF_HUD_SHORTCUT, togglePerfHud)
+  console.log(`[shortcuts] ${PERF_HUD_SHORTCUT} (perfHud): ${perfOk ? 'ok' : 'FAILED — already claimed'}`)
+
   await startTelemetryPolling((telemetry: IRacingTelemetry) => {
     setOverlaysVisible(telemetry.connected)
     if (telemetry.connected) {
-      broadcastToAll('telemetry:update', telemetry)
+      broadcastToOverlays('telemetry:update', telemetry)
     }
   })
 })
@@ -386,6 +566,7 @@ app.whenReady().then(async () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopTelemetryPolling()
+  flushPerfHud()
 })
 
 app.on('window-all-closed', () => {

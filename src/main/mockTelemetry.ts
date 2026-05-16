@@ -187,8 +187,8 @@ export function createMockPoller() {
 
     return {
       connected: true,
-      // Dev mode always simulates the driver being in their cockpit so overlays
-      // render. Real-SDK IsOnTrack reflects the iRacing menu/cockpit state.
+      // Preview mode always simulates the driver being in their cockpit so
+      // overlays render. Real-SDK IsOnTrack reflects the iRacing menu/cockpit state.
       isOnTrack: true,
       sessionType: state.sessionType,
       sessionTime: state.tick * dt,
@@ -196,6 +196,11 @@ export function createMockPoller() {
 
       playerCarIdx: PLAYER_CAR_IDX,
       playerCarRedLine: 9400, // Porsche 992 GT3 Cup
+      // Simulate iRacing's `ShiftIndicatorPct`: a 0-1 ramp that hits 1.0 at
+      // ~95% of redline (typical optimum shift point for a road car).  Mock
+      // value lets the Gauges overlay's flash zone exercise both the SDK and
+      // percentage code paths during preview mode.
+      shiftIndicatorPct: Math.max(0, Math.min(1, (state.playerRpm / 9400 - 0.70) / 0.25)),
       speed: state.playerSpeed + Math.random() * 2 - 1,
       gear: state.playerGear,
       rpm: state.playerRpm,
@@ -226,7 +231,7 @@ export function createMockPoller() {
       },
       cars:     carsRaw,
       drivers:  MOCK_DRIVERS,
-      // Dev mode simulates a car with full capability support
+      // Preview mode simulates a car with full capability support
       capabilities: { hasSurfaceTireTemps: true, hasTractionControl: true, hasABS: true },
     }
   }

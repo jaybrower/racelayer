@@ -1,4 +1,4 @@
-interface DevModeState {
+interface PreviewModeState {
   enabled: boolean
   sessionType: 'practice' | 'qualifying' | 'race'
 }
@@ -17,21 +17,53 @@ type UpdateStatus =
   | { state: 'ready';         version: string }
   | { state: 'error';         message: string }
 
+/** Rolling render-time stats for one overlay. */
+interface OverlayPerfStats {
+  count: number   // samples in window
+  p50: number     // ms
+  p95: number     // ms
+  max: number     // ms
+  mean: number    // ms
+}
+
+/** One Electron process entry from `app.getAppMetrics()`, packaged for the HUD. */
+interface PerfProcessMetric {
+  type: string
+  name?: string
+  cpuPct: number
+  memoryMB: number
+}
+
+/** Whole-app metrics snapshot. */
+interface PerfAppMetrics {
+  totalCpuPct: number
+  totalMemoryMB: number
+  perProcess: PerfProcessMetric[]
+}
+
+/** Snapshot pushed at 1 Hz when perf collection is enabled. */
+interface PerfSnapshot {
+  enabled: boolean
+  collectedAt: number
+  overlays: Record<string, OverlayPerfStats>
+  app: PerfAppMetrics
+}
+
 interface Window {
   iracingOverlay: {
     onTelemetryUpdate: (callback: (data: unknown) => void) => void
     onEditMode: (callback: (enabled: boolean) => void) => void
-    onDevModeChanged: (callback: (state: DevModeState) => void) => void
+    onPreviewModeChanged: (callback: (state: PreviewModeState) => void) => void
     onConfigChanged: (callback: (data: { overlay: string; config: unknown }) => void) => void
     getConfig: (overlay: string) => Promise<unknown>
     setConfig: (overlay: string, config: unknown) => Promise<void>
-    getDevMode: () => Promise<DevModeState>
-    setDevMode: (patch: Partial<DevModeState>) => Promise<void>
+    getPreviewMode: () => Promise<PreviewModeState>
+    setPreviewMode: (patch: Partial<PreviewModeState>) => Promise<void>
     getShortcuts: () => Promise<ShortcutMap>
     setShortcut: (key: string, accel: string) => Promise<{ ok: boolean; error?: string }>
     resetPositions: () => Promise<void>
-    getWindowPosition: () => Promise<{ x: number; y: number }>
-    setWindowPosition: (x: number, y: number) => void
+    getWindowBounds: () => Promise<{ x: number; y: number; width: number; height: number }>
+    setWindowBounds: (x: number, y: number, width: number, height: number) => void
     removeAllListeners: (channel: string) => void
     getStartupEnabled: () => Promise<boolean>
     setStartupEnabled: (enable: boolean) => Promise<void>
@@ -40,6 +72,13 @@ interface Window {
     checkForUpdates: () => Promise<void>
     downloadUpdate: () => Promise<void>
     installUpdate: () => Promise<void>
+    openExternal: (url: string) => Promise<void>
     onUpdateStatus: (callback: (status: UpdateStatus) => void) => void
+    // Perf HUD plumbing (issue #32) — see `src/main/perfMetrics.ts`.
+    reportRenderSamples: (overlayId: string, durations: number[]) => void
+    getPerfEnabled: () => Promise<boolean>
+    getPerfSnapshot: () => Promise<PerfSnapshot>
+    onPerfEnabled: (callback: (enabled: boolean) => void) => void
+    onPerfSnapshot: (callback: (snapshot: PerfSnapshot) => void) => void
   }
 }

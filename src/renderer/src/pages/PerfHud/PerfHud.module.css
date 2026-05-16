@@ -1,0 +1,139 @@
+/* Perf HUD styling.
+   Visually quieter than the live overlays — the HUD is for an audience of
+   developers / power users, not a glanceable race tool, so we trade
+   readability-at-speed for information density. */
+
+.container {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 11px;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #38bdf8;
+}
+
+.shortcut {
+  font-family: 'Cascadia Mono', 'Consolas', monospace;
+  font-size: 9px;
+  color: #64748b;
+}
+
+.muted {
+  color: #64748b;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.summaryLabel {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.summaryValue {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f1f5f9;
+  font-variant-numeric: tabular-nums;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionTitle {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.tableHeader,
+.tableRow,
+.idleRow {
+  display: grid;
+  grid-template-columns: 1fr 36px 36px 36px 26px;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  align-items: baseline;
+}
+
+.tableRowSmall {
+  display: grid;
+  grid-template-columns: 1fr 44px 56px;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.tableHeader {
+  font-size: 9px;
+  color: #64748b;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+  padding-bottom: 3px;
+  margin-bottom: 2px;
+}
+
+.tableHeader > span:not(:first-child),
+.tableRow > span:not(:first-child),
+.tableRowSmall > span:not(:first-child),
+.idleRow > span:not(:first-child) {
+  text-align: right;
+}
+
+.tableRow,
+.idleRow {
+  padding: 2px 0;
+}
+
+.idleRow {
+  color: #64748b;
+}
+
+.processLabel {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.processName {
+  color: #94a3b8;
+}
