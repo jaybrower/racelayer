@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_OVERLAY_CONFIG,
   mergeWithDefaults,
+  OVERLAY_SCALE_OPTIONS,
 } from '../src/renderer/src/types/overlayConfig'
 
 describe('mergeWithDefaults', () => {
@@ -112,6 +113,45 @@ describe('mergeWithDefaults', () => {
     const stored = { global: { hideUnsupportedElements: false } }
     const merged = mergeWithDefaults(stored)
     expect(merged.global.hideUnsupportedElements).toBe(false)
+  })
+
+  // ── global.overlayScale (added in v0.1.6 for #14) ─────────────────────────
+  describe('global.overlayScale', () => {
+    it('defaults to 1.0 when omitted (forward-compat from older configs)', () => {
+      const merged = mergeWithDefaults({ global: { hideUnsupportedElements: true } })
+      expect(merged.global.overlayScale).toBe(1.0)
+    })
+
+    it('preserves every allowed preset value', () => {
+      for (const value of OVERLAY_SCALE_OPTIONS) {
+        const merged = mergeWithDefaults({ global: { overlayScale: value } })
+        expect(merged.global.overlayScale).toBe(value)
+      }
+    })
+
+    it('rejects unexpected values (defends against hand-edited configs)', () => {
+      // Out-of-set numbers default back — protects window-sizing math from a
+      // surprise 3.0× or fractional scale entering the pipeline.
+      for (const bogus of [0.5, 2.0, 1.1, 0, -1, NaN, Infinity]) {
+        const merged = mergeWithDefaults({ global: { overlayScale: bogus } })
+        expect(merged.global.overlayScale).toBe(1.0)
+      }
+    })
+
+    it('rejects non-numeric values', () => {
+      for (const bogus of ['1.25', 'large', null, true, [], {}]) {
+        const merged = mergeWithDefaults({ global: { overlayScale: bogus } })
+        expect(merged.global.overlayScale).toBe(1.0)
+      }
+    })
+
+    it('all OVERLAY_SCALE_OPTIONS values are valid presets (sanity check)', () => {
+      // If someone adds a preset to the array, this test catches a forgotten
+      // change to the renderer-side validator OR the main-side ALLOWED_SCALES
+      // constant in `src/main/overlayScale.ts`.
+      expect(OVERLAY_SCALE_OPTIONS).toContain(1.0) // default must be valid
+      expect(OVERLAY_SCALE_OPTIONS.length).toBeGreaterThanOrEqual(2)
+    })
   })
 
   // ── gauges.shiftPoint (added in v0.1.5) ────────────────────────────────────
