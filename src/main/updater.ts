@@ -71,6 +71,23 @@ export function initUpdater(
   // Silently install when the app quits normally (if update was downloaded).
   autoUpdater.autoInstallOnAppQuit = true
 
+  // Pin the update channel to `latest`.
+  //
+  // By default electron-updater DERIVES the channel from the current app's
+  // version string: if the running version has a prerelease component
+  // (e.g. `0.1.0-autoUpdateTest.1`), the prerelease prefix becomes the
+  // channel name (`autoUpdateTest`).  The library then looks for releases
+  // on that channel — which for any one-off `dist:pre` build means looking
+  // for a channel that doesn't exist on GitHub, producing the confusing
+  // "No published versions on GitHub" error.
+  //
+  // RaceLayer ships a single stable channel — there's no real beta program
+  // — so we force every install (stable, dist:pre, ad-hoc test builds) to
+  // check the `latest` channel where v0.1.X releases actually live.  If we
+  // ever add a real beta program, this becomes version-dependent again.
+  // See #46.
+  autoUpdater.channel = 'latest'
+
   // Lifecycle events.  Successful transitions clear any pending safety-net
   // timeout so the timeout-fires-after-success race doesn't clobber state.
   autoUpdater.on('checking-for-update', () => {
