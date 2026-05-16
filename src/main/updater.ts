@@ -78,22 +78,43 @@ export function initUpdater(
   // Silently install when the app quits normally (if update was downloaded).
   autoUpdater.autoInstallOnAppQuit = true
 
-  // Pin the update channel to `latest`.
+  // Pin the update channel to `latest` AND force allow-prerelease off.
   //
-  // By default electron-updater DERIVES the channel from the current app's
-  // version string: if the running version has a prerelease component
-  // (e.g. `0.1.0-autoUpdateTest.1`), the prerelease prefix becomes the
-  // channel name (`autoUpdateTest`).  The library then looks for releases
-  // on that channel — which for any one-off `dist:pre` build means looking
-  // for a channel that doesn't exist on GitHub, producing the confusing
-  // "No published versions on GitHub" error.
+  // Two electron-updater defaults bite us when the *currently-installed*
+  // build has a prerelease tag (which happens for `dist:pre` test builds
+  // like `0.1.0-autoUpdateTest.3`):
+  //
+  //   1. `allowPrerelease` auto-flips to `true`.  This routes
+  //      `GitHubProvider.getLatestVersion()` into a code path that filters
+  //      releases by channel.
+  //   2. `channel` is derived from the current version's prerelease tag —
+  //      so a one-off `-autoUpdateTest.3` build looks for releases on the
+  //      `autoUpdateTest` channel, which doesn't exist on GitHub.
+  //
+  // The filtering loop in that channel-aware branch only matches releases
+  // whose entry channel equals `currentChannel`, OR when `currentChannel`
+  // is one of `null` / `'alpha'` / `'beta'`.  Stable releases (like v0.1.5)
+  // have no channel tag at all, so they never match a custom channel —
+  // producing the confusing "No published versions on GitHub" error.
+  //
+  // Confirmed against the actual electron-updater source path
+  // (`GitHubProvider.js` line ~70-90 in 6.8.3) and against live debug logs.
+  // See #46 for the full investigation thread.
+  //
+  // The fix is BOTH lines below.  The channel pin alone isn't enough —
+  // even with `channel = 'latest'`, the filtering branch can't match a
+  // stable release because `'latest'` isn't `null`/`'alpha'`/`'beta'` and
+  // stable v0.1.5 doesn't carry a channel.  Disabling `allowPrerelease`
+  // routes us into the *non-*prerelease branch instead, which fetches
+  // `/releases/latest` directly and works the way every other
+  // electron-updater app does.
   //
   // RaceLayer ships a single stable channel — there's no real beta program
-  // — so we force every install (stable, dist:pre, ad-hoc test builds) to
-  // check the `latest` channel where v0.1.X releases actually live.  If we
-  // ever add a real beta program, this becomes version-dependent again.
-  // See #46.
+  // — so this is correct for every install (stable, dist:pre, ad-hoc test
+  // builds).  If we ever add a real beta program, both lines become
+  // version-dependent again.
   autoUpdater.channel = 'latest'
+  autoUpdater.allowPrerelease = false
 
   // Lifecycle events.  Successful transitions clear any pending safety-net
   // timeout so the timeout-fires-after-success race doesn't clobber state.
