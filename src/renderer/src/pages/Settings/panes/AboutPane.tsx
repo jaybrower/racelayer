@@ -1,10 +1,10 @@
 import styles from '../Settings.module.css'
 
 const LINKS = [
-  { label: 'GitHub repository', url: 'https://github.com/jaybrower/racelayer' },
-  { label: 'Changelog (release notes)', url: 'https://github.com/jaybrower/racelayer/releases' },
-  { label: 'Report a bug / request a feature', url: 'https://github.com/jaybrower/racelayer/issues/new' },
-  { label: 'License (MIT)', url: 'https://github.com/jaybrower/racelayer/blob/main/LICENSE' },
+  { label: 'GitHub repository', url: 'https://github.com/oiddad/racelayer' },
+  { label: 'Changelog (release notes)', url: 'https://github.com/oiddad/racelayer/releases' },
+  { label: 'Report a bug / request a feature', url: 'https://github.com/oiddad/racelayer/issues/new' },
+  { label: 'License (MIT)', url: 'https://github.com/oiddad/racelayer/blob/main/LICENSE' },
 ] as const
 
 function ExternalLink({ url, children }: { url: string; children: React.ReactNode }) {

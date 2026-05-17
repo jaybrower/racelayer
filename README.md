@@ -52,7 +52,7 @@ Four-corner tire temperature display with color-coded heat mapping — cold to h
 
 ## Installation
 
-Download the latest release from the [Releases](https://github.com/jaybrower/racelayer/releases) page.
+Download the latest release from the [Releases](https://github.com/oiddad/racelayer/releases) page.
 
 Two options:
 - **RaceLayer-Setup-x.x.x.exe** — standard installer, adds a system tray icon on startup
@@ -83,7 +83,7 @@ Press `Ctrl+Shift+L` to enter Layout Mode. All overlays become draggable — pos
 **Prerequisites:** Node.js 18+, Windows (required for iRacing shared memory access in dev)
 
 ```bash
-git clone https://github.com/jaybrower/racelayer.git
+git clone https://github.com/oiddad/racelayer.git
 cd racelayer
 npm install
 

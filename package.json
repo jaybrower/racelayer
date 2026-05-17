@@ -12,11 +12,15 @@
     "dist": "electron-vite build && electron-builder",
     "dist:dir": "electron-vite build && electron-builder --dir",
     "dist:pre": "node scripts/dist-prerelease.mjs",
+    "release:finalize": "node scripts/release/finalize.mjs",
+    "release:promote": "node scripts/release/promote.mjs",
+    "release:publish": "node scripts/release/publish.mjs",
+    "release:open-next": "node scripts/release/open-next.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "build": {
-    "appId": "com.jaybrower.racelayer",
+    "appId": "com.oiddad.racelayer",
     "productName": "RaceLayer",
     "directories": {
       "buildResources": "resources",
@@ -60,7 +64,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "jaybrower",
+      "owner": "oiddad",
       "repo": "racelayer"
     }
   },

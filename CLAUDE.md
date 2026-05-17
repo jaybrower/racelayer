@@ -88,7 +88,7 @@
 An Electron + React overlay application that renders real-time telemetry from iRacing onto a transparent, always-on-top window. Built for Windows. Each overlay is its own `BrowserWindow` (transparent, frameless, `alwaysOnTop: screen-saver`). A tray icon and Settings window are the only non-overlay UI.
 
 App name: **RaceLayer** | Package name: `racelayer` | Version: `1000.0.0`
-GitHub: `https://github.com/jaybrower/racelayer`
+GitHub: `https://github.com/oiddad/racelayer`
 
 ## Project Structure
 
@@ -163,6 +163,13 @@ npm run dist:pre -- rc.2
 
 # Regenerate app icons from scratch
 npm run icons
+
+# Release pipeline scripts (invoked by the /release skill — see scripts/release/*.mjs)
+# All four accept --dry-run to validate preconditions without mutating anything.
+npm run release:finalize  -- vX.Y.Z   # opens & lands chore/finalize-vX.Y.Z PR (steps 3-4)
+npm run release:promote   -- vX.Y.Z   # opens release -> main PR, merges, tags (steps 5-7)
+npm run release:publish   -- vX.Y.Z   # npm run dist + GH release + uploads (steps 9-11)
+npm run release:open-next -- vX.Y.Z   # branches release/vX.Y.Z, scaffolds notes, milestone (step 13)
 ```
 
 iRacing must be running for real telemetry. Use **Preview Mode** (Settings → Preview Mode) to show overlays with simulated data without iRacing.

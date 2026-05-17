@@ -11,5 +11,5 @@
 # committed means a future debugging session can toggle the short-circuit off
 # and exercise the real feed without any setup.
 provider: github
-owner: jaybrower
+owner: oiddad
 repo: racelayer

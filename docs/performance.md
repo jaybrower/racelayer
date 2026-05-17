@@ -4,7 +4,7 @@ This document captures RaceLayer's measured performance overhead, so we can
 spot regressions in future PRs and answer "does RaceLayer cause my iRacing
 framerate to drop?" with data instead of vibes.
 
-It's the deliverable for [issue #32](https://github.com/jaybrower/racelayer/issues/32).
+It's the deliverable for [issue #32](https://github.com/oiddad/racelayer/issues/32).
 The acceptance bar is in the issue; the short version: total CPU < 5% on a
 modern desktop with all overlays on, no measurable iRacing FPS drop in a
 full-grid race, no heap growth slope over a 60-min session.
