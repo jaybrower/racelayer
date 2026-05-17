@@ -129,7 +129,31 @@ export interface FuelInputs {
   currentLap: number
   /** Most recent completed lap time (seconds).  0 if unknown. */
   lapLastLapTime: number
+  /** Laps left in the current session (`IRacingTelemetry.sessionLapsRemain`).
+   *  Values outside `[1, MAX_USABLE_LAPS_REMAIN]` are treated as "not a
+   *  usable lap count" — typically because the session is timed.  Optional
+   *  for backward compat with callers that don't yet pipe it through. */
+  sessionLapsRemain?: number
 }
+
+/** Urgency tier for the Pit Window display.  Drives the colour ramp + which
+ *  copy variant the UI shows.  See `urgencyFor()` for the threshold math. */
+export type PitUrgency =
+  | 'finish'   // race ends before fuel runs out — no pit needed for fuel alone
+  | 'safe'     // pit is comfortably far away (6+ laps)
+  | 'warn'     // pit is approaching (3–5 laps)
+  | 'danger'   // pit imminent or overdue (≤ 2 laps)
+  | 'unknown'  // no reliable estimate yet
+
+/** Boundaries between urgency tiers, in laps-until-required-pit. */
+export const URGENCY_DANGER_THRESHOLD = 3
+export const URGENCY_WARN_THRESHOLD   = 6
+
+/** A `sessionLapsRemain` value at or above this is treated as a sentinel
+ *  rather than a real lap count.  iRacing reports very large values (often
+ *  `32767`) for timed sessions; the upper bound of "this could plausibly
+ *  be a real race length" is well below that. */
+export const MAX_USABLE_LAPS_REMAIN = 9999
 
 export interface FuelStats {
   /** Estimated per-lap fuel consumption (litres).  0 when no reliable estimate. */
@@ -138,17 +162,70 @@ export interface FuelStats {
   lapsOnFuel: number
   /** True when either the rolling samples or live SDK rate produced a useful number. */
   hasReliableEstimate: boolean
-  /** Latest lap at which the player should pit, or null when unknown. */
+  /** Latest lap at which the player should pit, or null when no fuel-forced
+   *  pit is needed in this race (race ends before fuel runs out) or when
+   *  there's no reliable fuel estimate. */
   pitLap: number | null
+  /** Whole laps from `currentLap` until the player must pit, or null when
+   *  `pitLap` is null.  Same value as `pitLap - currentLap`, surfaced
+   *  separately so the UI can read it without re-doing the math. */
+  lapsUntilPit: number | null
+  /** True when the race ends before fuel runs out — i.e. the player can
+   *  complete the race without pitting for fuel.  Drives the
+   *  `urgency: 'finish'` UI variant. */
+  finishOnFuel: boolean
+  /** Laps remaining in the race when the value is a usable lap count.
+   *  `null` when timed / sentinel — i.e. when no race-endpoint awareness
+   *  is available.  Surfaced separately so the UI can render context like
+   *  "(N laps left)" when appropriate. */
+  lapsLeftInRace: number | null
+  /** Visual urgency tier; see `PitUrgency`. */
+  urgency: PitUrgency
+}
+
+/** Map a `lapsUntilPit` value (or null) to an urgency tier.  Pulled out so
+ *  the boundary math stays in one place and is unit-testable on its own. */
+export function urgencyFor(lapsUntilPit: number | null, finishOnFuel: boolean): PitUrgency {
+  if (finishOnFuel) return 'finish'
+  if (lapsUntilPit === null) return 'unknown'
+  if (lapsUntilPit < URGENCY_DANGER_THRESHOLD) return 'danger'
+  if (lapsUntilPit < URGENCY_WARN_THRESHOLD)   return 'warn'
+  return 'safe'
+}
+
+/** Human-readable countdown label for the Pit Window.  Returns the headline
+ *  string that the UI renders large + coloured (e.g. "Pit in 5 laps"); the
+ *  absolute `pitLap` is shown in a secondary "by Lap 14" affordance.
+ *
+ *  Special-cases the two values where a plain "in N laps" reading would be
+ *  ambiguous mid-race:
+ *    - 0 laps  → "Pit this lap"  (the player is on the pit lap RIGHT NOW;
+ *                                 come in at the end of this lap)
+ *    - 1 lap   → "Pit next lap"  (the lap after the current one is the
+ *                                 pit lap)
+ *
+ *  Returns `null` when `lapsUntilPit` is unknown (no reliable fuel estimate)
+ *  so the caller can render nothing rather than misleading text. */
+export function pitCountdownLabel(lapsUntilPit: number | null): string | null {
+  if (lapsUntilPit === null) return null
+  if (lapsUntilPit === 0) return 'Pit this lap'
+  if (lapsUntilPit === 1) return 'Pit next lap'
+  return `Pit in ${lapsUntilPit} laps`
 }
 
 /**
  * Compute fuel statistics for the Pit Strategy overlay.
  *
- * Priority order:
+ * Priority order for the per-lap consumption estimate:
  *   1. Rolling average of measured per-lap fuel (most accurate).
  *   2. Live `fuelUsePerHour × lapTime` (reasonable while actually driving).
  *   3. No estimate — return zeros so the UI can render `--` instead of garbage.
+ *
+ * When `sessionLapsRemain` is in the usable range, the function also computes
+ * race-endpoint awareness (#12): if the race ends before fuel runs out,
+ * `pitLap` / `lapsUntilPit` are nulled and `finishOnFuel` is set so the UI
+ * shows a green "Finish on fuel" affordance instead of a misleading
+ * fuel-forced pit-by lap that's *after* the checkered flag.
  *
  * Pure function: caller is responsible for maintaining the rolling samples ref.
  */
@@ -158,6 +235,7 @@ export function computeFuelStats({
   fuelUsePerHour,
   currentLap,
   lapLastLapTime,
+  sessionLapsRemain,
 }: FuelInputs): FuelStats {
   let fuelPerLap = 0
   let hasReliableEstimate = false
@@ -172,9 +250,42 @@ export function computeFuelStats({
   }
 
   const lapsOnFuel = hasReliableEstimate && fuelPerLap > 0 ? fuelLevel / fuelPerLap : 0
-  const pitLap = lapsOnFuel > 0 ? Math.floor(currentLap + lapsOnFuel - 0.5) : null
 
-  return { fuelPerLap, lapsOnFuel, hasReliableEstimate, pitLap }
+  // Race-endpoint awareness.  `sessionLapsRemain` is only trusted when it's
+  // a plausible integer lap count — timed races emit sentinels (typically
+  // `-1` or `32767`) which we deliberately classify as "no info".
+  const lapsLeftInRace =
+    typeof sessionLapsRemain === 'number'
+      && Number.isFinite(sessionLapsRemain)
+      && sessionLapsRemain >= 1
+      && sessionLapsRemain <= MAX_USABLE_LAPS_REMAIN
+      ? Math.floor(sessionLapsRemain)
+      : null
+
+  const finishOnFuel = lapsLeftInRace !== null && lapsOnFuel > 0 && lapsLeftInRace <= lapsOnFuel
+
+  // `pitLap` / `lapsUntilPit` are null when:
+  //   - There's no reliable fuel estimate, OR
+  //   - The race ends before fuel runs out (no fuel-forced pit needed).
+  let pitLap: number | null = null
+  let lapsUntilPit: number | null = null
+  if (lapsOnFuel > 0 && !finishOnFuel) {
+    pitLap       = Math.floor(currentLap + lapsOnFuel - 0.5)
+    lapsUntilPit = Math.max(0, pitLap - currentLap)
+  }
+
+  const urgency = urgencyFor(lapsUntilPit, finishOnFuel)
+
+  return {
+    fuelPerLap,
+    lapsOnFuel,
+    hasReliableEstimate,
+    pitLap,
+    lapsUntilPit,
+    finishOnFuel,
+    lapsLeftInRace,
+    urgency,
+  }
 }
 
 // ── Per-tick state machine ───────────────────────────────────────────────────

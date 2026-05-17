@@ -14,7 +14,13 @@ import { setPerfEnabled, isPerfEnabled } from './perfMetrics.js'
 
 interface HudBounds { x: number; y: number; width: number; height: number }
 
-const HUD_DEFAULT_SIZE = { width: 320, height: 280 }
+// Height accounts for: header (~20) + CPU/MEM summary (~60) + render-time
+// table (header + 5 rows ≈ 110) + top-processes table (header + ~3 rows ≈ 70)
+// + Debug panel (~110) + gaps/padding (~30) ≈ ~410.  Round up to 460 for
+// breathing room.  Users with bounds saved from before this default landed
+// keep their old size — the container is scrollable so it works at any
+// size, this is just the first-launch nicety.
+const HUD_DEFAULT_SIZE = { width: 320, height: 460 }
 
 let hudWindow: BrowserWindow | null = null
 

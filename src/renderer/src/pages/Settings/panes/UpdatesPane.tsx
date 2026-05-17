@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import styles from '../Settings.module.css'
 
 export default function UpdatesPane({
@@ -7,6 +8,28 @@ export default function UpdatesPane({
   appVersion: string
   updateStatus: UpdateStatus
 }) {
+  // Log-file path — surfaced in the support footer so users hitting a
+  // mysterious updater failure have something actionable to share.  Lazily
+  // fetched on first mount; the path doesn't change at runtime.
+  const [logPath, setLogPath] = useState<string>('')
+  useEffect(() => {
+    window.iracingOverlay.getUpdaterLogPath().then(setLogPath).catch(() => {})
+  }, [])
+
+  // Log-level state — keep in sync so we can gate the support footer on
+  // verbosity.  On stable installs the default is `warn`, which means the
+  // log file has barely anything useful for support, so we hide the path
+  // entirely.  When a dev / support session bumps the level via the Perf
+  // HUD (or it's auto-bumped for a dist:pre build), the footer reappears.
+  // See issue #50.
+  const [logState, setLogState] = useState<LogLevelState | null>(null)
+  useEffect(() => {
+    window.iracingOverlay.getLogState().then(setLogState).catch(() => {})
+    window.iracingOverlay.onLogLevelChanged(setLogState)
+    return () => window.iracingOverlay.removeAllListeners('log:level-changed')
+  }, [])
+  const logsVerbose = logState?.level === 'info' || logState?.level === 'debug'
+
   return (
     <>
       <div className={styles.paneIntro}>
@@ -81,6 +104,14 @@ export default function UpdatesPane({
           </div>
         )}
 
+        {/* Distinct affordance for unpackaged runs: explain why the check is
+            skipped so dev-mode testers don't waste time debugging.  See #46. */}
+        {updateStatus.state === 'dev' && (
+          <div className={styles.updateMuted}>
+            Running from source — updates only check in packaged installs.
+          </div>
+        )}
+
         {updateStatus.state === 'error' && (
           <div className={styles.updateError}>
             <span>Update failed</span>
@@ -93,6 +124,24 @@ export default function UpdatesPane({
           </div>
         )}
       </div>
+
+      {/* Show the underlying error message below the row.  Previously errors
+          were silent ("Update failed" with no detail), which gave us nothing
+          to act on in support requests — see #46. */}
+      {updateStatus.state === 'error' && (
+        <div className={styles.updateErrorDetail}>{updateStatus.message}</div>
+      )}
+
+      {/* Support footer — surfaces the log file path so users can copy + share
+          when an update fails for non-obvious reasons.  Doesn't show in the
+          'dev' state (devs already know where their own logs are), AND only
+          shows when the log level is verbose enough (info / debug) for the
+          file to contain something useful for support.  See issue #50. */}
+      {logPath && logsVerbose && updateStatus.state !== 'dev' && (
+        <div className={styles.updateLogPath}>
+          Updater logs: <code>{logPath}</code>
+        </div>
+      )}
     </>
   )
 }

@@ -16,6 +16,20 @@ type UpdateStatus =
   | { state: 'downloading';   percent: number }
   | { state: 'ready';         version: string }
   | { state: 'error';         message: string }
+  | { state: 'dev' }
+
+/** Available log levels (issue #50).  Ordered from quietest to loudest. */
+type LogLevel = 'error' | 'warn' | 'info' | 'debug'
+
+type LogBuildTier = 'dev' | 'prerelease' | 'stable'
+
+/** Snapshot of the logging system's current state. */
+interface LogLevelState {
+  level: LogLevel
+  default: LogLevel
+  buildTier: LogBuildTier
+  isOverride: boolean
+}
 
 /** Rolling render-time stats for one overlay. */
 interface OverlayPerfStats {
@@ -72,6 +86,13 @@ interface Window {
     checkForUpdates: () => Promise<void>
     downloadUpdate: () => Promise<void>
     installUpdate: () => Promise<void>
+    getUpdaterLogPath: () => Promise<string>
+    // Log-level controls (issue #50) — see `src/main/logging.ts`.
+    getLogState: () => Promise<LogLevelState>
+    setLogLevel: (level: LogLevel) => Promise<LogLevelState>
+    resetLogLevel: () => Promise<LogLevelState>
+    revealLogFolder: () => Promise<string>
+    onLogLevelChanged: (callback: (state: LogLevelState) => void) => void
     openExternal: (url: string) => Promise<void>
     onUpdateStatus: (callback: (status: UpdateStatus) => void) => void
     // Perf HUD plumbing (issue #32) — see `src/main/perfMetrics.ts`.

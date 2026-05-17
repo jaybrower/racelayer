@@ -8,6 +8,15 @@ import { getPreviewMode, setPreviewMode } from './previewMode.js'
 import { initShortcuts, registerShortcutIpc } from './shortcuts.js'
 import { initUpdater, getUpdateStatus, checkForUpdates, downloadUpdate, quitAndInstall } from './updater.js'
 import {
+  initLogging,
+  getLogLevelState,
+  setLogLevel as applyLogLevel,
+  resetLogLevel as resetLogLevelImpl,
+  getLogPath as getUpdaterLogPath,
+  openLogFolder,
+  type LogLevel,
+} from './logging.js'
+import {
   initPerfMetrics,
   recordRenderSamples,
   computeSnapshot as computePerfSnapshot,
@@ -15,6 +24,12 @@ import {
   type RenderSampleBatch,
 } from './perfMetrics.js'
 import { togglePerfHud, getPerfHudWindow, flushPerfHud } from './perfHud.js'
+import {
+  initOverlayScale,
+  applyScaleToWindow,
+  handleScaleChange,
+  getCurrentScale,
+} from './overlayScale.js'
 import type { IRacingTelemetry } from './telemetry.js'
 
 /** Hardcoded global shortcut for the Perf HUD.  Deliberately undocumented in
@@ -91,6 +106,11 @@ function createOverlayWindow(def: OverlayDef): BrowserWindow {
       hash: `/${def.route}`,
     })
   }
+
+  // Apply the persisted global overlay scale (#14).  Hooks
+  // `did-finish-load` so the zoom factor survives any future renderer
+  // reload — every page load otherwise resets to 1.0.
+  applyScaleToWindow(win)
 
   windows.set(def.name, win)
   return win
@@ -265,21 +285,28 @@ function broadcastToOverlays(channel: string, data: unknown) {
   })
 }
 
-/** Send an IPC event to every window — overlays AND the Settings window.
- *  Use this for *state-change* channels that the Settings UI cares about:
- *  `previewMode:changed`, `config:changed`, `update:status`, etc.  Without
- *  this fan-out, the Settings pane never sees changes initiated from the
- *  tray menu (e.g. toggling Preview Mode from the Windows tray).
+/** Send an IPC event to every window — overlays AND the Settings window AND
+ *  the Perf HUD (if open).
+ *
+ *  Use this for *state-change* channels that any renderer might care about:
+ *  `previewMode:changed`, `config:changed`, `update:status`,
+ *  `log:level-changed`, etc.  Without this fan-out the receiving window
+ *  doesn't learn about the change until something forces it to re-fetch
+ *  state on its own.
  *
  *  Original `broadcastToAll` did NOT include the Settings window, so any
  *  state change driven from the tray or from the main process never
  *  propagated to Settings — visible to the user as Preview Mode getting
- *  out of sync between tray and Settings. */
+ *  out of sync between tray and Settings.  Subsequently the Perf HUD was
+ *  added; same logic applies — anything that affects the level shown in
+ *  the Debug panel (i.e. `log:level-changed`) needs to reach the HUD. */
 function broadcastToAll(channel: string, data: unknown) {
   broadcastToOverlays(channel, data)
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send(channel, data)
   }
+  const hud = getPerfHudWindow()
+  if (hud) hud.webContents.send(channel, data)
 }
 
 /** Channel-aware fan-out for perf-collection events.
@@ -459,6 +486,10 @@ function registerUpdaterIpc() {
   ipcMain.handle('update:check',     () => checkForUpdates())
   ipcMain.handle('update:download',  () => downloadUpdate())
   ipcMain.handle('update:install',   () => quitAndInstall())
+  // Kept as an alias to the same path the new `log:getState` returns.
+  // Existing renderers (Updates pane footer) can continue using
+  // `getUpdaterLogPath`; new ones should reach for the log-system state.
+  ipcMain.handle('update:getLogPath',() => getUpdaterLogPath())
   ipcMain.handle('app:version',      () => app.getVersion())
 }
 
@@ -471,6 +502,29 @@ function registerShellIpc() {
     if (!/^https?:\/\//i.test(url)) return
     shell.openExternal(url)
   })
+}
+
+function registerLogIpc() {
+  // Initial state + on-demand re-query.  The Perf HUD pulls this on mount;
+  // renderers also subscribe to `log:level-changed` for push updates.
+  ipcMain.handle('log:getState', () => getLogLevelState())
+
+  // Apply a user override.  Persists to disk + broadcasts the new state.
+  ipcMain.handle('log:setLevel', (_event, level: unknown) => {
+    if (typeof level !== 'string') return getLogLevelState()
+    applyLogLevel(level as LogLevel)
+    return getLogLevelState()
+  })
+
+  // Clear the override; revert to the build-tier default.
+  ipcMain.handle('log:resetLevel', () => {
+    resetLogLevelImpl()
+    return getLogLevelState()
+  })
+
+  // Open the log folder in the OS file browser.  Returns the empty string
+  // on success per `shell.openPath`; non-empty string is an error message.
+  ipcMain.handle('log:reveal', () => openLogFolder())
 }
 
 function registerPerfIpc() {
@@ -492,12 +546,34 @@ function registerPerfIpc() {
 }
 
 app.whenReady().then(async () => {
-  registerConfigHandlers(broadcastToAll)
+  // Logging must initialise before anything else that writes logs — see
+  // comment in `src/main/updater.ts`.  Otherwise the updater module logs to
+  // electron-log's pre-init no-op transport and we miss the first events.
+  initLogging(broadcastToAll)
+
+  // Read + cache the persisted overlay scale BEFORE the config handlers
+  // run.  `createOverlayWindow` → `applyScaleToWindow` reads this value
+  // at window-create time; if it's not initialised yet, windows would
+  // open at 1.0× regardless of the user's saved preference.  See #14.
+  initOverlayScale()
+
+  registerConfigHandlers(broadcastToAll, (overlay, config) => {
+    // React to the user changing the overlay scale in Settings → General.
+    // `handleScaleChange` is a no-op when the scale value hasn't actually
+    // changed (or is invalid), so it's safe to call on every config:set
+    // — we don't need to diff here.  See `src/main/overlayScale.ts`.
+    if (overlay === 'overlayConfig') {
+      const newScale =
+        (config as { global?: { overlayScale?: unknown } } | null)?.global?.overlayScale
+      handleScaleChange(newScale, windows.values())
+    }
+  })
   registerWindowIpc()
   registerPreviewModeIpc()
   registerStartupIpc()
   registerShellIpc()
   registerUpdaterIpc()
+  registerLogIpc()
   registerPerfIpc()
   initUpdater(broadcastToAll)
   initPerfMetrics(broadcastPerf)
@@ -521,6 +597,16 @@ app.whenReady().then(async () => {
     { name: 'radar', route: 'radar', width: 180, height: 240, ...defaults.radar },
   ]
 
+  // If the user has a non-default overlay scale persisted but NO saved
+  // bounds yet (first launch after they bumped scale in Settings before
+  // ever dragging an overlay, or after a config-reset that wiped bounds),
+  // default-sized windows would be too small to fit their zoomed content.
+  // Multiply the per-overlay defaults by the current scale so the initial
+  // window dimensions match what `webContents.setZoomFactor` will render.
+  // Saved bounds skip this — they're already at-scale from their last
+  // save.  See #14.
+  const initialScale = getCurrentScale()
+
   for (const def of OVERLAYS) {
     const saved = savedPositions[def.name]
     createOverlayWindow(saved ? {
@@ -529,7 +615,11 @@ app.whenReady().then(async () => {
       y:      saved.y      ?? def.y,
       width:  saved.width  ?? def.width,
       height: saved.height ?? def.height,
-    } : def)
+    } : {
+      ...def,
+      width:  Math.round(def.width  * initialScale),
+      height: Math.round(def.height * initialScale),
+    })
   }
 
   settingsWindow = createSettingsWindow()

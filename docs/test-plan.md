@@ -158,7 +158,18 @@ This was the v0.1.3 fix for overlays appearing in menus. Re-verify on every rele
 - [ ] **Last lap** row only renders when it's not also the stint best (no duplicate row).
 - [ ] **Trend (vs LAST N)** appears after lap 2 of the stint, muted styling through lap 3, full color from lap 4+.
 - [ ] **vs STINT BEST** renders below the trend; always ≥ 0.
-- [ ] **Pit Window → "Pit by Lap N"** shows once fuel-per-lap is known.
+- [ ] **Pit Window → "Pit by Lap N (in M laps)"** shows once fuel-per-lap is known.
+
+#### Pit Window urgency + countdown (#12)
+- [ ] **Urgency colour ramp** — drive a low-fuel run where the pit lap creeps closer. The Pit Window row should shift colour as `lapsUntilPit` crosses the thresholds:
+  - **Green ("safe")** when ≥ 6 laps until the forced pit.
+  - **Amber ("warn")** when 3–5 laps until pit.
+  - **Red ("danger")** when ≤ 2 laps until pit (or already overdue).
+- [ ] **Countdown phrasing** — "Pit by Lap 14 (in 3 laps)". Reads "1 lap" singular vs "N laps" plural correctly.
+- [ ] **Finish on fuel** — when the race ends before fuel runs out, the row flips to green "✓ Finish on fuel" with "N laps left" on the right. The fuel-forced "Pit by Lap N" row should NOT render simultaneously.
+  - Easiest to verify in Preview Mode with the mock 30-lap race: as `state.currentLap` climbs past ~28, the row flips to "Finish on fuel".
+  - In a live race, verify near the checkered flag.
+- [ ] **Timed-race graceful fallback** — in a timed (non-lap-counted) session, `sessionLapsRemain` returns a sentinel (`-1` or `32767`). The pit window should fall back to the pre-#12 behaviour: just "Pit by Lap N (in M laps)" with no finish-on-fuel branch.
 
 #### Pit-affected lap filtering
 - [ ] Make a pit stop. The in-lap and the lap after rejoining (out-lap) should NOT appear in the stint — `Stint of N` resets to 0 then climbs back from 1 on the next clean lap.
@@ -205,6 +216,16 @@ The Settings window uses a left-rail sidebar with six panes: **General**, **Over
 - [ ] **General → Launch on startup** — toggle round-trips with Windows login items.
 - [ ] **General → Auto-hide unsupported overlays** — toggle off; an overlay with no supported features still appears (empty placeholder). Toggle on; the overlay disappears.
 - [ ] **General → Overlay Positions** — "Reset to defaults" snaps every overlay back. Layout-Mode shortcut hint shows the current keybinding.
+
+#### General → Overlay Scale (#14)
+- [ ] Four presets visible — 75% / 100% / 125% / 150% — rendered as a horizontal radio group, the currently-applied value highlighted blue.
+- [ ] Picking 125% — every overlay window grows 25% in both dimensions, content scales proportionally (text, SVG arrows on Gauges, Radar dots, etc.) and stays inside the frame.
+- [ ] Picking 75% — every overlay window shrinks; content still legible.
+- [ ] Picking back to 100% — windows return to original size.
+- [ ] **Drag-resize an overlay manually**, then change scale. The user-resized dimensions get multiplied by the new ratio (not snapped back to defaults).
+- [ ] **Position is preserved** when scale changes (top-left x/y unchanged; only width/height multiplied).
+- [ ] **Persist across restart** — set scale to 125%, quit the app, relaunch. Overlays open at the same 125%-sized dimensions and content renders at the same zoom factor.
+- [ ] **Config corruption guard** — hand-edit `userData/config/overlays/overlayConfig.json` to set `global.overlayScale: 2.0` (or any non-preset value). Relaunch. App opens at 100% (fallback), no crash.
 - [ ] **Overlays — sticky session header** — the "Practice / Qualifying / Race" column header stays visible while scrolling down through all overlays.
 - [ ] **Overlays — per-overlay grouping** — each overlay has a visible group header (Gauges, Tire Temps, Relative, Pit Strategy, Radar) with a brief description above its rows.
 - [ ] **Overlays — tooltip on hover** — hover any row; a native browser tooltip appears within ~500ms explaining the toggle. Verify at least 3 different rows (one overlay-level, one element-level, one column-level on Relative).

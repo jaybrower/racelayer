@@ -55,8 +55,19 @@ function overlayLabel(id: string): string {
   }
 }
 
+const LOG_LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug']
+
+function buildTierLabel(tier: LogBuildTier): string {
+  switch (tier) {
+    case 'dev':        return 'dev build'
+    case 'prerelease': return 'prerelease build'
+    case 'stable':     return 'stable build'
+  }
+}
+
 export default function PerfHud() {
   const [snapshot, setSnapshot] = useState<PerfSnapshot | null>(null)
+  const [logState, setLogState] = useState<LogLevelState | null>(null)
   // The Perf HUD is a dev / support-debug tool that's only ever visible when
   // the user has explicitly toggled it on, so we make it always-draggable
   // rather than gating drag behind the global Layout Mode shortcut.  The main
@@ -70,6 +81,28 @@ export default function PerfHud() {
     window.iracingOverlay.onPerfSnapshot((s) => setSnapshot(s as PerfSnapshot))
     return () => window.iracingOverlay.removeAllListeners('perf:snapshot')
   }, [])
+
+  // Log-level state.  Pulled once on mount, kept in sync via the broadcast
+  // channel so updates from elsewhere (or future re-broadcasts) flow through
+  // without needing manual refresh.
+  useEffect(() => {
+    window.iracingOverlay.getLogState().then(setLogState)
+    window.iracingOverlay.onLogLevelChanged(setLogState)
+    return () => window.iracingOverlay.removeAllListeners('log:level-changed')
+  }, [])
+
+  // Click handlers — async wrappers so errors don't unhandled-reject.  Both
+  // RPCs return the new state, but we also rely on the broadcast for consistency
+  // with future external triggers (e.g. a CLI flag flipping the level).
+  const onSetLevel = (level: LogLevel) => {
+    window.iracingOverlay.setLogLevel(level).then(setLogState).catch(() => {})
+  }
+  const onResetLevel = () => {
+    window.iracingOverlay.resetLogLevel().then(setLogState).catch(() => {})
+  }
+  const onRevealLogs = () => {
+    window.iracingOverlay.revealLogFolder().catch(() => {})
+  }
 
   const topProcesses = snapshot
     ? [...snapshot.app.perProcess]
@@ -159,6 +192,56 @@ export default function PerfHud() {
             ))}
           </div>
         </>
+      )}
+
+      {/* ── Debug panel (issue #50) ───────────────────────────────────────────
+          Lets dev / support sessions raise the log level without rebuilding.
+          Hidden from the regular Settings UI to stay out of end users' way;
+          the only way in is the same secret Ctrl+Shift+Alt+P shortcut that
+          opens this HUD in the first place. */}
+      {logState && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Debug</div>
+
+          <div className={styles.debugLevelRow}>
+            <span className={styles.debugLevelLabel}>Log level</span>
+            <div className={styles.debugLevelSegmented}>
+              {LOG_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className={`${styles.debugLevelBtn} ${logState.level === level ? styles.debugLevelBtnActive : ''}`}
+                  onClick={() => onSetLevel(level)}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.debugMeta}>
+            <span className={styles.muted}>
+              Default: <code>{logState.default}</code> ({buildTierLabel(logState.buildTier)})
+            </span>
+            {logState.isOverride && (
+              <button
+                type="button"
+                className={styles.debugResetBtn}
+                onClick={onResetLevel}
+              >
+                Reset to default
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className={styles.debugRevealBtn}
+            onClick={onRevealLogs}
+          >
+            Reveal logs in Explorer
+          </button>
+        </div>
       )}
     </div>
   )

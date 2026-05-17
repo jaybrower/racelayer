@@ -1,6 +1,13 @@
 export type SType = 'practice' | 'qualifying' | 'race'
 export type SessionFlags = Record<SType, boolean>
 
+/** Allowed values for the global overlay-scale picker (issue #14).  Fixed
+ *  presets — no continuous slider — so the UI is a clean radio group and
+ *  the test surface stays small.  Add more values here + in the picker JSX
+ *  if user demand justifies it later. */
+export const OVERLAY_SCALE_OPTIONS = [0.75, 1.0, 1.25, 1.5] as const
+export type OverlayScale = (typeof OVERLAY_SCALE_OPTIONS)[number]
+
 export interface GlobalConfig {
   /**
    * When true, overlays and elements that require car-specific telemetry
@@ -9,6 +16,18 @@ export interface GlobalConfig {
    * them regardless of support.
    */
   hideUnsupportedElements: boolean
+
+  /**
+   * Global overlay scale factor.  Applied via `webContents.setZoomFactor`
+   * on every overlay window AND by multiplying each window's persisted
+   * bounds, so content doesn't overflow / leave dead space at non-1.0
+   * scales.  Restricted to a small set of presets (`OVERLAY_SCALE_OPTIONS`)
+   * so the picker can stay a 4-button radio group.
+   *
+   * Default is 1.0 — every overlay sized + zoomed exactly as the per-
+   * overlay defaults specify.
+   */
+  overlayScale: OverlayScale
 }
 
 /** Source for the RPM-bar "shift now" flash trigger. */
@@ -109,6 +128,7 @@ export interface OverlayConfig {
 export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
   global: {
     hideUnsupportedElements: true,
+    overlayScale: 1.0,
   },
   gauges: {
     enabled: { practice: true, qualifying: true, race: true },
@@ -179,11 +199,22 @@ export function mergeWithDefaults(stored: unknown): OverlayConfig {
   const storedPitSecs  = (storedPit.sections   ?? {}) as Record<string, unknown>
   const def            = DEFAULT_OVERLAY_CONFIG
 
+  // Validate the stored overlay scale against the allowed presets — a hand-
+  // edited config can't poison the union type, and any unexpected value
+  // (older / future schema, corrupted file) silently falls back to the 1.0
+  // default rather than breaking window-sizing math downstream.
+  const storedScale = storedGlobal.overlayScale
+  const validScale: OverlayScale =
+    (OVERLAY_SCALE_OPTIONS as readonly number[]).includes(storedScale as number)
+      ? (storedScale as OverlayScale)
+      : def.global.overlayScale
+
   return {
     global: {
       hideUnsupportedElements:
         (storedGlobal.hideUnsupportedElements as boolean | undefined) ??
         def.global.hideUnsupportedElements,
+      overlayScale: validScale,
     },
     gauges: {
       enabled: mergeSF(def.gauges.enabled, storedGauges.enabled),

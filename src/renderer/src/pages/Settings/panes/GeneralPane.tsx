@@ -1,5 +1,9 @@
 import { useOverlayConfig } from '../../../contexts/OverlayConfigContext'
-import type { OverlayConfig } from '../../../types/overlayConfig'
+import {
+  type OverlayConfig,
+  type OverlayScale,
+  OVERLAY_SCALE_OPTIONS,
+} from '../../../types/overlayConfig'
 import { formatAccelerator } from '../lib'
 import styles from '../Settings.module.css'
 
@@ -62,6 +66,39 @@ export default function GeneralPane({
           <span className={styles.toggleTrack} />
           <span className={styles.toggleThumb} />
         </label>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionTitle}>Overlay Scale</span>
+        </div>
+        <div className={styles.sectionBody}>
+          <div className={styles.toggleDesc}>
+            Scale every overlay up or down to match your monitor size or
+            resolution. Window dimensions resize proportionally so content
+            stays inside the frame; your custom positions are preserved.
+          </div>
+          <div className={styles.radioGroup}>
+            {OVERLAY_SCALE_OPTIONS.map((value) => (
+              <label key={value} className={styles.radioBtn}>
+                <input
+                  type="radio"
+                  name="overlayScale"
+                  checked={config.global.overlayScale === value}
+                  onChange={() =>
+                    patch((c) => {
+                      c.global.overlayScale = value as OverlayScale
+                      return c
+                    })
+                  }
+                />
+                <span className={styles.radioBtnLabel}>
+                  {Math.round(value * 100)}%
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className={styles.section}>
