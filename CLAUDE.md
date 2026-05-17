@@ -72,6 +72,24 @@
 >
 > **Branch naming:** keep names short and conventional-commits-aligned — `feat/closing-rate`, `fix/pit-mode-gap`, `chore/branch-policy-update`. Release branches always carry the `v` prefix to match git tags: `release/v0.1.3`, never `release/0.1.3`.
 >
+> **Branch cleanup after merge:** When a PR merges, `gh pr merge --delete-branch` removes the *remote* branch on origin, but the local copy sticks around. Without periodic cleanup the local branch list balloons (this repo accumulated ~20 stale branches across ~6 releases before #61 surfaced it). Run this after any merge — feature, release, finalize, hotfix:
+>
+> ```bash
+> git fetch --prune
+> git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -r git branch -d
+> ```
+>
+> `git fetch --prune` removes the remote-tracking refs for branches deleted on origin; `git branch -vv` flags each local branch whose upstream now reads `[gone]`; `git branch -d` (lowercase, safe) deletes them and refuses any that still have unmerged commits. Use `-D` (capital, force) only if you're sure. Set `git config --global fetch.prune true` to make the first step run automatically on every fetch.
+>
+> PowerShell equivalent (this repo is Windows-only, so this is the form you'll usually want):
+>
+> ```powershell
+> git fetch --prune
+> git branch -vv | Select-String ': gone]' | ForEach-Object { ($_ -split '\s+')[1] } | ForEach-Object { git branch -d $_ }
+> ```
+>
+> Worth running at the end of every `/release` run in particular — a release flushes a finalize branch + the release branch + any feature branches that landed, all of which become stale once `main` has the tag.
+>
 > **Release-notes enforcement:** Every PR targeting a `release/v*` branch must modify the corresponding `release-notes/vX.Y.Z.md` file. Enforced by the `Require Release Notes` GitHub Action (`.github/workflows/require-release-notes.yml`). Bypass with the `no-release-notes` label on the PR for pure refactors or behaviour-preserving changes where `Internal: (none)` is the honest answer — the workflow re-runs on label add/remove, so applying the label turns the failing check green without a force-push.
 >
 > **Testing:** Two complementary layers.
