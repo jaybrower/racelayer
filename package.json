@@ -13,6 +13,7 @@
     "dist:dir": "electron-vite build && electron-builder --dir",
     "dist:pre": "node scripts/dist-prerelease.mjs",
     "release:finalize": "node scripts/release/finalize.mjs",
+    "release:promote": "node scripts/release/promote.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

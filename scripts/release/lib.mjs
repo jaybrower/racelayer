@@ -91,3 +91,26 @@ export function fail(msg) {
 }
 
 export const repo = 'jaybrower/racelayer'
+
+/**
+ * Strip the `## Internal` section (and everything until the next `## ` heading
+ * or EOF) from a release-notes markdown body. Matches the awk one-liner in the
+ * legacy skill. Used by promote (release-branch -> main PR body) and publish
+ * (GitHub Release body) — both surfaces are user-facing.
+ */
+export function stripInternalSection(md) {
+  const lines = md.split('\n')
+  const out = []
+  let skipping = false
+  for (const line of lines) {
+    if (/^## Internal\b/.test(line)) {
+      skipping = true
+      continue
+    }
+    if (skipping && /^## /.test(line)) {
+      skipping = false
+    }
+    if (!skipping) out.push(line)
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
+}
