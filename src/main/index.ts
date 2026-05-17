@@ -24,6 +24,12 @@ import {
   type RenderSampleBatch,
 } from './perfMetrics.js'
 import { togglePerfHud, getPerfHudWindow, flushPerfHud } from './perfHud.js'
+import {
+  initOverlayScale,
+  applyScaleToWindow,
+  handleScaleChange,
+  getCurrentScale,
+} from './overlayScale.js'
 import type { IRacingTelemetry } from './telemetry.js'
 
 /** Hardcoded global shortcut for the Perf HUD.  Deliberately undocumented in
@@ -100,6 +106,11 @@ function createOverlayWindow(def: OverlayDef): BrowserWindow {
       hash: `/${def.route}`,
     })
   }
+
+  // Apply the persisted global overlay scale (#14).  Hooks
+  // `did-finish-load` so the zoom factor survives any future renderer
+  // reload — every page load otherwise resets to 1.0.
+  applyScaleToWindow(win)
 
   windows.set(def.name, win)
   return win
@@ -540,7 +551,23 @@ app.whenReady().then(async () => {
   // electron-log's pre-init no-op transport and we miss the first events.
   initLogging(broadcastToAll)
 
-  registerConfigHandlers(broadcastToAll)
+  // Read + cache the persisted overlay scale BEFORE the config handlers
+  // run.  `createOverlayWindow` → `applyScaleToWindow` reads this value
+  // at window-create time; if it's not initialised yet, windows would
+  // open at 1.0× regardless of the user's saved preference.  See #14.
+  initOverlayScale()
+
+  registerConfigHandlers(broadcastToAll, (overlay, config) => {
+    // React to the user changing the overlay scale in Settings → General.
+    // `handleScaleChange` is a no-op when the scale value hasn't actually
+    // changed (or is invalid), so it's safe to call on every config:set
+    // — we don't need to diff here.  See `src/main/overlayScale.ts`.
+    if (overlay === 'overlayConfig') {
+      const newScale =
+        (config as { global?: { overlayScale?: unknown } } | null)?.global?.overlayScale
+      handleScaleChange(newScale, windows.values())
+    }
+  })
   registerWindowIpc()
   registerPreviewModeIpc()
   registerStartupIpc()
@@ -570,6 +597,16 @@ app.whenReady().then(async () => {
     { name: 'radar', route: 'radar', width: 180, height: 240, ...defaults.radar },
   ]
 
+  // If the user has a non-default overlay scale persisted but NO saved
+  // bounds yet (first launch after they bumped scale in Settings before
+  // ever dragging an overlay, or after a config-reset that wiped bounds),
+  // default-sized windows would be too small to fit their zoomed content.
+  // Multiply the per-overlay defaults by the current scale so the initial
+  // window dimensions match what `webContents.setZoomFactor` will render.
+  // Saved bounds skip this — they're already at-scale from their last
+  // save.  See #14.
+  const initialScale = getCurrentScale()
+
   for (const def of OVERLAYS) {
     const saved = savedPositions[def.name]
     createOverlayWindow(saved ? {
@@ -578,7 +615,11 @@ app.whenReady().then(async () => {
       y:      saved.y      ?? def.y,
       width:  saved.width  ?? def.width,
       height: saved.height ?? def.height,
-    } : def)
+    } : {
+      ...def,
+      width:  Math.round(def.width  * initialScale),
+      height: Math.round(def.height * initialScale),
+    })
   }
 
   settingsWindow = createSettingsWindow()

@@ -216,6 +216,16 @@ The Settings window uses a left-rail sidebar with six panes: **General**, **Over
 - [ ] **General → Launch on startup** — toggle round-trips with Windows login items.
 - [ ] **General → Auto-hide unsupported overlays** — toggle off; an overlay with no supported features still appears (empty placeholder). Toggle on; the overlay disappears.
 - [ ] **General → Overlay Positions** — "Reset to defaults" snaps every overlay back. Layout-Mode shortcut hint shows the current keybinding.
+
+#### General → Overlay Scale (#14)
+- [ ] Four presets visible — 75% / 100% / 125% / 150% — rendered as a horizontal radio group, the currently-applied value highlighted blue.
+- [ ] Picking 125% — every overlay window grows 25% in both dimensions, content scales proportionally (text, SVG arrows on Gauges, Radar dots, etc.) and stays inside the frame.
+- [ ] Picking 75% — every overlay window shrinks; content still legible.
+- [ ] Picking back to 100% — windows return to original size.
+- [ ] **Drag-resize an overlay manually**, then change scale. The user-resized dimensions get multiplied by the new ratio (not snapped back to defaults).
+- [ ] **Position is preserved** when scale changes (top-left x/y unchanged; only width/height multiplied).
+- [ ] **Persist across restart** — set scale to 125%, quit the app, relaunch. Overlays open at the same 125%-sized dimensions and content renders at the same zoom factor.
+- [ ] **Config corruption guard** — hand-edit `userData/config/overlays/overlayConfig.json` to set `global.overlayScale: 2.0` (or any non-preset value). Relaunch. App opens at 100% (fallback), no crash.
 - [ ] **Overlays — sticky session header** — the "Practice / Qualifying / Race" column header stays visible while scrolling down through all overlays.
 - [ ] **Overlays — per-overlay grouping** — each overlay has a visible group header (Gauges, Tire Temps, Relative, Pit Strategy, Radar) with a brief description above its rows.
 - [ ] **Overlays — tooltip on hover** — hover any row; a native browser tooltip appears within ~500ms explaining the toggle. Verify at least 3 different rows (one overlay-level, one element-level, one column-level on Relative).
