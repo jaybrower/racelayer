@@ -14,6 +14,7 @@
     "dist:pre": "node scripts/dist-prerelease.mjs",
     "release:finalize": "node scripts/release/finalize.mjs",
     "release:promote": "node scripts/release/promote.mjs",
+    "release:publish": "node scripts/release/publish.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
