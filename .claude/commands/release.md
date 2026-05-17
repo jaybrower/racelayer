@@ -39,7 +39,7 @@ If the suite passes, capture the test count for the scope summary in step 2.
 Print a summary of what's about to happen:
 
 - The list of commits on `release/$ARGUMENTS` that aren't on `main` yet (`git log --oneline main..release/$ARGUMENTS`).
-- The list of issues in the `$ARGUMENTS` milestone with `ready-to-release` label that will be auto-closed.
+- The list of issues in the `$ARGUMENTS` milestone with `ready-to-release` label that will be auto-closed when step 6 lands the release branch on main.
 - The current `package.json` version (sanity check — should already match `$ARGUMENTS` since CLAUDE.md says to bump at branch-open; if it doesn't, fold the bump into step 3).
 - The test-suite result from step 1 (e.g. "126/126 vitest pass") so the user can see the green-light before approving.
 
@@ -175,15 +175,24 @@ gh release upload $ARGUMENTS \
 
 For a prerelease, omit `latest.yml`.
 
-### 12. Close `ready-to-release` issues in the milestone
+### 12. Verify `ready-to-release` issues auto-closed on the merge to main
+
+**You shouldn't need to close anything here** — issues normally auto-close themselves when the `release/$ARGUMENTS → main` merge from step 6 lands. The feature PRs were squash-merged into the release branch with their `Closes #N` keywords preserved in the squashed commit messages, and the release branch is merged into main with `--merge` (not squash, per step 6), so those commits arrive on main intact. GitHub scans commit messages on the default branch and auto-closes referenced issues.
+
+Just verify:
 
 ```bash
-gh issue list --label ready-to-release --milestone $ARGUMENTS \
-  --state open --json number --jq '.[].number' --repo jaybrower/racelayer \
-  | xargs -I{} gh issue close {} --reason completed --repo jaybrower/racelayer
+gh issue list --milestone $ARGUMENTS --state all --json number,state,title \
+  --jq '.[] | "[\(.state)] #\(.number) \(.title)"' --repo jaybrower/racelayer
 ```
 
-Verify by listing the milestone — all entries should be `[CLOSED]` now.
+Every entry in the milestone should be `[CLOSED]`. If anything is still `[OPEN]`, the feature PR for that issue probably didn't include `Closes #N` in its commit body — close it manually:
+
+```bash
+gh issue close <num> --reason completed --repo jaybrower/racelayer
+```
+
+Confirmed correct on v0.1.6 release (2026-05-16): all 6 milestone issues auto-closed on step 6's merge — step 12 was a no-op verification.
 
 ### 13. Open the next release branch
 

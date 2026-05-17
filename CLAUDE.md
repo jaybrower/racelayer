@@ -64,12 +64,10 @@
 >
 > Filter the backlog with `is:open -label:ready-to-release` to see only actively-pending work.
 >
-> When a release ships (release/v* → main merges and the new build is published), close all the `ready-to-release` issues for that milestone in one shot:
+> When the `release/v* → main` PR merges, the `ready-to-release` issues for that milestone auto-close — feature PRs are squash-merged into the release branch with their `Closes #N` keywords preserved in the squash commit message, and the release-branch PR merges into main as a **merge commit** (`gh pr merge --merge`, not `--squash`) so those individual commits arrive on main intact. GitHub scans commit messages on the default branch and closes the referenced issues. If a stray issue remains open after the release lands (the linked PR didn't include a `Closes #N` keyword), close it by hand:
 >
 > ```bash
-> gh issue list --label ready-to-release --milestone v0.1.3 \
->   --state open --json number --jq '.[].number' \
->   | xargs -I{} gh issue close {} --reason completed
+> gh issue close <num> --reason completed
 > ```
 >
 > **Branch naming:** keep names short and conventional-commits-aligned — `feat/closing-rate`, `fix/pit-mode-gap`, `chore/branch-policy-update`. Release branches always carry the `v` prefix to match git tags: `release/v0.1.3`, never `release/0.1.3`.
