@@ -82,13 +82,13 @@ Just verify:
 
 ```bash
 gh issue list --milestone $ARGUMENTS --state all --json number,state,title \
-  --jq '.[] | "[\(.state)] #\(.number) \(.title)"' --repo jaybrower/racelayer
+  --jq '.[] | "[\(.state)] #\(.number) \(.title)"' --repo oiddad/racelayer
 ```
 
 Every entry should be `[CLOSED]`. If anything is still `[OPEN]`, close it by hand:
 
 ```bash
-gh issue close <num> --reason completed --repo jaybrower/racelayer
+gh issue close <num> --reason completed --repo oiddad/racelayer
 ```
 
 ### 13. Open the next release branch
@@ -107,14 +107,14 @@ npm run release:open-next -- $NEXT
 This branches, bumps, scaffolds, pushes, and creates the milestone. After it succeeds, ask the user (via AskUserQuestion) which open backlog issues to move into the new milestone. For each selected issue:
 
 ```bash
-gh issue edit <num> --repo jaybrower/racelayer --milestone $NEXT
+gh issue edit <num> --repo oiddad/racelayer --milestone $NEXT
 ```
 
 ## Closing report
 
 When done, post a single summary message listing:
 
-- Release URL (`https://github.com/jaybrower/racelayer/releases/tag/$ARGUMENTS`)
+- Release URL (`https://github.com/oiddad/racelayer/releases/tag/$ARGUMENTS`)
 - Tag SHA (captured from `release:promote` output)
 - Number of issues closed
 - New release branch + milestone
@@ -129,7 +129,7 @@ Keep it under 250 words. The full play-by-play is already in the TodoWrite progr
 - CI fails on the finalize PR or the release-to-main PR.
 - `release:publish` reports missing artifacts after `npm run dist`.
 - The tag already exists on origin (`git ls-remote --tags origin $ARGUMENTS` returns a row).
-- The GitHub Release for `$ARGUMENTS` already exists (`gh release view $ARGUMENTS --repo jaybrower/racelayer` succeeds).
+- The GitHub Release for `$ARGUMENTS` already exists (`gh release view $ARGUMENTS --repo oiddad/racelayer` succeeds).
 - A script exits non-zero for any reason — read the output and ask before retrying.
 
 When in doubt: stop, surface the situation, ask before continuing. A botched release is much worse than a slow one.

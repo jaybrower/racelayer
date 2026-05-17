@@ -265,8 +265,8 @@ export function checkForUpdates() {
  */
 async function probeGitHubFeeds(): Promise<void> {
   const urls = [
-    'https://github.com/jaybrower/racelayer/releases.atom',
-    'https://github.com/jaybrower/racelayer/releases/latest',
+    'https://github.com/oiddad/racelayer/releases.atom',
+    'https://github.com/oiddad/racelayer/releases/latest',
   ]
   for (const url of urls) {
     await new Promise<void>((resolve) => {

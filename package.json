@@ -20,7 +20,7 @@
     "test:watch": "vitest"
   },
   "build": {
-    "appId": "com.jaybrower.racelayer",
+    "appId": "com.oiddad.racelayer",
     "productName": "RaceLayer",
     "directories": {
       "buildResources": "resources",
@@ -64,7 +64,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "jaybrower",
+      "owner": "oiddad",
       "repo": "racelayer"
     }
   },

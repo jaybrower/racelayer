@@ -90,7 +90,7 @@ export function fail(msg) {
   process.exit(1)
 }
 
-export const repo = 'jaybrower/racelayer'
+export const repo = 'oiddad/racelayer'
 
 /**
  * Strip the `## Internal` section (and everything until the next `## ` heading
