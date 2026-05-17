@@ -15,6 +15,7 @@
     "release:finalize": "node scripts/release/finalize.mjs",
     "release:promote": "node scripts/release/promote.mjs",
     "release:publish": "node scripts/release/publish.mjs",
+    "release:open-next": "node scripts/release/open-next.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
